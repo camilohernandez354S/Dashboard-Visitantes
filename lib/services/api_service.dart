@@ -58,6 +58,7 @@ class ApiService {
 
 /// Entidad principal con los datos del dashboard.
 class DashboardData {
+  final int instructores;
   final int aprendices;
   final int funcionarios;
   final int visitantes;
@@ -65,6 +66,7 @@ class DashboardData {
   final List<WeeklyAttendance> weekly;
 
   const DashboardData({
+    required this.instructores,
     required this.aprendices,
     required this.funcionarios,
     required this.visitantes,
@@ -73,6 +75,7 @@ class DashboardData {
   });
 
   DashboardData copyWith({
+    int? instructores,
     int? aprendices,
     int? funcionarios,
     int? visitantes,
@@ -80,6 +83,7 @@ class DashboardData {
     List<WeeklyAttendance>? weekly,
   }) {
     return DashboardData(
+      instructores: instructores ?? this.instructores,
       aprendices: aprendices ?? this.aprendices,
       funcionarios: funcionarios ?? this.funcionarios,
       visitantes: visitantes ?? this.visitantes,
@@ -115,6 +119,7 @@ class DashboardData {
     }
 
     return copyWith(
+      instructores: _asInt(payload['instructores']) ?? instructores,
       aprendices: _asInt(payload['aprendices']) ?? aprendices,
       funcionarios: _asInt(payload['funcionarios']) ?? funcionarios,
       visitantes: _asInt(payload['visitantes']) ?? visitantes,
@@ -145,6 +150,10 @@ class DashboardData {
     }
 
     return DashboardData(
+      instructores:
+          json['instructores'] is int
+              ? json['instructores'] as int
+              : (json['instructores'] as num?)?.toInt() ?? 0,
       aprendices:
           json['aprendices'] is int
               ? json['aprendices'] as int
@@ -164,10 +173,12 @@ class DashboardData {
 
   factory DashboardData.mock() {
     return DashboardData(
+      instructores: 12,
       aprendices: 145,
       funcionarios: 23,
       visitantes: 8,
       variations: const {
+        'instructores': 2.8,
         'aprendices': 4.5,
         'funcionarios': -2.1,
         'visitantes': 1.3,

@@ -1,14 +1,15 @@
 import 'dart:async';
+
+import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../providers/dashboard_realtime_controller.dart';
 import '../services/api_service.dart';
-import '../theme/app_theme.dart';
-import '../utils/color_utils.dart';
-import '../widgets/combined_chart.dart';
+import '../theme/admin_theme.dart';
+import '../widgets/admin_chart_panel.dart';
 import '../widgets/stat_card.dart';
 
-/// Dashboard principal sin scroll, estilo corporativo.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -121,16 +122,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF4F7F4),
+        backgroundColor: AdminTheme.background,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(color: AppTheme.senaPrimary),
-              const SizedBox(height: 16),
-              const Text(
+            children: const [
+              CircularProgressIndicator(color: AdminTheme.primaryBlue),
+              SizedBox(height: 16),
+              Text(
                 'Cargando dashboard...',
-                style: TextStyle(fontSize: 16, color: Color(0xFF5F5F5F)),
+                style: TextStyle(fontSize: 16, color: AdminTheme.textMuted),
               ),
             ],
           ),
@@ -140,7 +141,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (_errorMessage != null && _latestData == null) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF4F7F4),
+        backgroundColor: AdminTheme.background,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -163,7 +164,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 14,
-                    color: Color(0xFF606060),
+                    color: AdminTheme.textMuted,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -171,6 +172,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onPressed: _initializeDashboard,
                   icon: const Icon(Icons.refresh_rounded),
                   label: const Text('Reintentar'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AdminTheme.primaryBlue,
+                  ),
                 ),
               ],
             ),
@@ -180,137 +184,102 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final baselineData = _latestData ?? _dashboardData ?? DashboardData.mock();
-    final effectiveStream = _dashboardStream;
-    final statusStream = _socketStatusStream;
 
     return StreamBuilder<DashboardData>(
-      stream: effectiveStream,
+      stream: _dashboardStream,
       initialData: baselineData,
       builder: (context, snapshot) {
         final data = snapshot.data ?? baselineData;
-        final bool isRealtimeTick =
+        final bool realtimeTick =
             snapshot.connectionState == ConnectionState.active ||
             snapshot.connectionState == ConnectionState.done;
-        final lastRefresh = isRealtimeTick ? DateTime.now() : _lastRefresh;
-        final showIndicator = lastRefresh != null;
+        final lastRefresh = realtimeTick ? DateTime.now() : _lastRefresh;
+        final lastRefreshLabel =
+            lastRefresh != null
+                ? DateFormat('HH:mm:ss').format(lastRefresh)
+                : null;
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF4F7F4),
+          backgroundColor: AdminTheme.background,
           appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            toolbarHeight: 76,
-            titleSpacing: 24,
+            titleSpacing: 20,
             title: Row(
               children: [
                 Container(
-                  height: 48,
-                  width: 48,
+                  height: 44,
+                  width: 44,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.senaPrimary.withOpacity(0.85),
-                        AppTheme.senaPrimary.withOpacity(0.65),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.senaPrimary.withOpacity(0.25),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
+                    color: Colors.white.withOpacity(0.18),
                   ),
                   child: const Icon(
                     Icons.dashboard_rounded,
                     color: Colors.white,
-                    size: 28,
+                    size: 26,
                   ),
                 ),
                 const SizedBox(width: 16),
-                const Text(
-                  'Dashboard de Visitantes SENA',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF2B2B2B),
-                  ),
-                ),
+                const Text('Dashboard de Visitantes SENA'),
               ],
             ),
             actions: [
-              if (statusStream != null)
+              if (_socketStatusStream != null)
                 StreamBuilder<SocketStatus>(
-                  stream: statusStream,
+                  stream: _socketStatusStream,
                   initialData: SocketStatus.connecting,
                   builder: (context, statusSnapshot) {
                     final status = statusSnapshot.data ?? SocketStatus.idle;
                     return Padding(
-                      padding: const EdgeInsets.only(right: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: _buildSocketStatusPill(status),
                     );
                   },
                 ),
-              if (showIndicator)
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: AnimatedOpacity(
-                    opacity: _contentVisible ? 1 : 0,
-                    duration: const Duration(milliseconds: 500),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.85),
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.access_time_rounded,
-                            size: 18,
-                            color: Color(0xFF5F5F5F),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            DateFormat('HH:mm:ss').format(_currentTime),
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF3D3D3D),
-                            ),
-                          ),
-                        ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.access_time_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      DateFormat('HH:mm:ss').format(_currentTime),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
                       ),
                     ),
-                  ),
+                  ],
                 ),
+              ),
+              IconButton(
+                tooltip: 'Actualizar manualmente',
+                onPressed: _handleManualRefresh,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
             ],
           ),
           body: LayoutBuilder(
             builder: (context, constraints) {
-              final horizontalPadding = (constraints.maxWidth * 0.06).clamp(
+              final horizontalPadding = (constraints.maxWidth * 0.05).clamp(
                 24.0,
-                64.0,
+                60.0,
               );
-              final verticalPadding = (constraints.maxHeight * 0.04).clamp(
-                24.0,
-                64.0,
+              final verticalPadding = (constraints.maxHeight * 0.05).clamp(
+                18.0,
+                32.0,
               );
-              final isCompact = constraints.maxWidth < 900;
+              final availableWidth =
+                  constraints.maxWidth - (horizontalPadding * 2);
+              final cardTooltip =
+                  lastRefreshLabel == null
+                      ? null
+                      : 'Última actualización: $lastRefreshLabel';
 
               return Padding(
                 padding: EdgeInsets.symmetric(
@@ -318,112 +287,139 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   vertical: verticalPadding,
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
+                    Flexible(
                       flex: 3,
                       child: AnimatedOpacity(
                         opacity: _contentVisible ? 1 : 0,
-                        duration: const Duration(milliseconds: 650),
-                        curve: Curves.easeIn,
-                        child: _buildCardsSection(constraints, data, isCompact),
+                        duration: const Duration(milliseconds: 450),
+                        child: _buildMetricCards(
+                          availableWidth,
+                          data,
+                          cardTooltip,
+                        ),
                       ),
                     ),
-                    SizedBox(
-                      height: (constraints.maxHeight * 0.04).clamp(18.0, 32.0),
-                    ),
+                    const SizedBox(height: 18),
                     Expanded(
                       flex: 5,
-                      child: CombinedChart(
-                        data: data.weekly,
-                        barColor: AppTheme.senaPrimary,
-                        lineColor: const Color(0xFF4D6CFA),
+                      child: FadeInUp(
+                        duration: const Duration(milliseconds: 600),
+                        child: AdminChartPanel(
+                          data: data.weekly,
+                          barColor: AdminTheme.accentLime,
+                          lineColor: AdminTheme.appBar,
+                        ),
                       ),
                     ),
+                    const SizedBox(height: 18),
+                    _buildFooter(),
                   ],
                 ),
               );
             },
           ),
-          floatingActionButton: _buildRefreshFab(),
         );
       },
     );
   }
 
-  Widget _buildCardsSection(
-    BoxConstraints constraints,
+  Widget _buildMetricCards(
+    double availableWidth,
     DashboardData data,
-    bool isCompact,
+    String? tooltip,
   ) {
-    final cards = [
-      StatCard(
-        title: 'Aprendices',
-        value: data.aprendices,
-        icon: Icons.school_rounded,
-        color: const Color(0xFF80BFFF),
-        variation: data.variationFor('aprendices'),
+    final spacing = 18.0;
+    final metrics = [
+      (
+        'Instructor',
+        data.instructores,
+        Icons.person_3_rounded,
+        AdminTheme.primaryBlue,
+        data.variationFor('instructores'),
       ),
-      StatCard(
-        title: 'Funcionarios',
-        value: data.funcionarios,
-        icon: Icons.badge_rounded,
-        color: const Color(0xFFFFD88D),
-        variation: data.variationFor('funcionarios'),
+      (
+        'Aprendiz',
+        data.aprendices,
+        Icons.school_rounded,
+        AdminTheme.successGreen,
+        data.variationFor('aprendices'),
       ),
-      StatCard(
-        title: 'Visitantes',
-        value: data.visitantes,
-        icon: Icons.groups_rounded,
-        color: const Color(0xFF9EE6B4),
-        variation: data.variationFor('visitantes'),
+      (
+        'Funcionario',
+        data.funcionarios,
+        Icons.badge_rounded,
+        AdminTheme.warningAmber,
+        data.variationFor('funcionarios'),
+      ),
+      (
+        'Visitante',
+        data.visitantes,
+        Icons.directions_walk_rounded,
+        AdminTheme.infoTeal,
+        data.variationFor('visitantes'),
       ),
     ];
 
-    if (!isCompact) {
-      final gap = (constraints.maxWidth * 0.025).clamp(18.0, 42.0);
-      return Row(
-        children: [
-          Expanded(child: cards[0]),
-          SizedBox(width: gap),
-          Expanded(child: cards[1]),
-          SizedBox(width: gap),
-          Expanded(child: cards[2]),
-        ],
-      );
+    int columns;
+    if (availableWidth >= 1300) {
+      columns = 4;
+    } else if (availableWidth >= 860) {
+      columns = 2;
+    } else {
+      columns = 1;
     }
 
-    final verticalGap = (constraints.maxHeight * 0.03).clamp(16.0, 28.0);
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        cards[0],
-        SizedBox(height: verticalGap),
-        cards[1],
-        SizedBox(height: verticalGap),
-        cards[2],
-      ],
+    final itemWidth = ((availableWidth - (spacing * (columns - 1))) / columns)
+        .clamp(220.0, 520.0);
+
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Wrap(
+        spacing: spacing,
+        runSpacing: spacing,
+        children: [
+          for (var i = 0; i < metrics.length; i++)
+            SizedBox(
+              width: itemWidth,
+              child: FadeInDown(
+                duration: const Duration(milliseconds: 480),
+                delay: Duration(milliseconds: 80 * i),
+                child: StatCard(
+                  title: metrics[i].$1,
+                  value: metrics[i].$2,
+                  icon: metrics[i].$3,
+                  color: metrics[i].$4,
+                  variation: metrics[i].$5,
+                  tooltip: tooltip,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildRefreshFab() {
-    return FloatingActionButton.extended(
-      onPressed: _handleManualRefresh,
-      backgroundColor: AppTheme.senaPrimary,
-      label: Row(
-        children: const [
-          Icon(Icons.refresh_rounded),
-          SizedBox(width: 8),
-          Text('Actualizar'),
-        ],
+  Widget _buildFooter() {
+    return Align(
+      alignment: Alignment.center,
+      child: Text(
+        '© ${DateTime.now().year} SENA - Dashboard de Visitantes',
+        style: const TextStyle(
+          fontSize: 12,
+          color: AdminTheme.textMuted,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
 
   Widget _buildSocketStatusPill(SocketStatus status) {
     final (Color color, String label) = switch (status) {
-      SocketStatus.connected => (const Color(0xFF20C26D), 'Tiempo real'),
-      SocketStatus.connecting => (const Color(0xFF4D6CFA), 'Conectando...'),
-      SocketStatus.reconnecting => (const Color(0xFFE5A900), 'Reintentando...'),
+      SocketStatus.connected => (const Color(0xFF20C26D), 'En línea'),
+      SocketStatus.connecting => (Colors.amber, 'Conectando'),
+      SocketStatus.reconnecting => (const Color(0xFFE83E8C), 'Reintentando'),
       SocketStatus.disconnected => (const Color(0xFFD64545), 'Sin conexión'),
       SocketStatus.idle => (const Color(0xFF9E9E9E), 'Inactivo'),
     };
@@ -431,34 +427,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.85),
+        color: Colors.white.withOpacity(0.18),
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-        border: Border.all(color: color.withOpacity(0.4), width: 1),
+        border: Border.all(color: Colors.white54),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 10,
-            height: 10,
+            width: 8,
+            height: 8,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 8),
           Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: color.darken(0.15),
+              color: Colors.white,
             ),
           ),
         ],

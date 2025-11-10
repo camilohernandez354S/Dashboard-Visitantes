@@ -243,6 +243,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const Text(
+                  'Monitoreo en tiempo real de asistencia por sede — Centro Agroindustrial del Guaviare',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AdminTheme.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Flexible(
                   flex: 3,
                   child: _buildMetricCards(

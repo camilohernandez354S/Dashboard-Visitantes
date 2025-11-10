@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../theme/admin_theme.dart';
-import '../utils/color_utils.dart';
 
 class AdminChartPanel extends StatelessWidget {
   const AdminChartPanel({
@@ -71,32 +70,69 @@ class AdminChartPanel extends StatelessWidget {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '📊 Estadísticas semanales',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: AdminTheme.textDark,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: barColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Text(
-                  'Total semana: $total',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: barColor.darken(0.2),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    '📊 Estadísticas semanales',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AdminTheme.textDark,
+                    ),
                   ),
-                ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Comparativo general de registros acumulados',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AdminTheme.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF009739).withOpacity(0.14),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: const Color(0xFF009739).withOpacity(0.35),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.insights_rounded,
+                          size: 16,
+                          color: Color(0xFF009739),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Total semanal: $total personas',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF009739),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const _LegendRow(),
+                ],
               ),
             ],
           ),
@@ -264,6 +300,54 @@ class AdminChartPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LegendRow extends StatelessWidget {
+  const _LegendRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: const [
+        _LegendDot(label: 'Modelo', color: Color(0xFF28A745)),
+        SizedBox(width: 12),
+        _LegendDot(label: 'Centro', color: Color(0xFF007BFF)),
+        SizedBox(width: 12),
+        _LegendDot(label: 'Km 11', color: Color(0xFFF39C12)),
+      ],
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: AdminTheme.textMuted,
+          ),
+        ),
+      ],
     );
   }
 }

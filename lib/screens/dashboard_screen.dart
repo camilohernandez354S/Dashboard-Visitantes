@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -19,13 +18,13 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late final DashboardRealtimeController _realtimeController;
-  DashboardData? _dashboardData;
+  late final Stream<DashboardData> _dashboardStream;
+  late final Stream<SocketStatus> _socketStatusStream;
+
+  DashboardData? _initialData;
   DashboardData? _latestData;
-  Stream<DashboardData>? _dashboardStream;
-  Stream<SocketStatus>? _socketStatusStream;
   bool _loading = true;
   String? _errorMessage;
-  bool _contentVisible = false;
   DateTime _currentTime = DateTime.now();
   DateTime? _lastRefresh;
   Timer? _clockTimer;
@@ -36,6 +35,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _realtimeController = DashboardRealtimeController();
     _startClock();
     _initializeDashboard();
+    _setupRealtimeStreams();
   }
 
   void _startClock() {
@@ -48,8 +48,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _initializeDashboard() async {
     await _refreshFromApi(initial: true);
-    if (!mounted) return;
-    _setupRealtimeStreams();
   }
 
   Future<void> _refreshFromApi({bool initial = false}) async {
@@ -57,7 +55,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _loading = true;
         _errorMessage = null;
-        _contentVisible = false;
       });
     }
 
@@ -65,11 +62,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final result = await _realtimeController.loadInitialData();
       if (!mounted) return;
       setState(() {
-        _dashboardData = result;
+        _initialData = result;
         _latestData = result;
         _lastRefresh = DateTime.now();
         _loading = false;
-        _contentVisible = true;
         _errorMessage = null;
       });
     } catch (e) {
@@ -83,32 +79,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _setupRealtimeStreams() {
     _realtimeController.startRealtime();
-    setState(() {
-      _dashboardStream = _realtimeController.stream.map((data) {
-        final now = DateTime.now();
-        if (mounted) {
-          _dashboardData = data;
-          _latestData = data;
-          _contentVisible = true;
-          _lastRefresh = now;
-        } else {
-          _dashboardData = data;
-          _latestData = data;
-          _lastRefresh = now;
-        }
-        return data;
-      });
-      _socketStatusStream = _realtimeController.socketStatus;
+    _socketStatusStream = _realtimeController.socketStatus;
+    _dashboardStream = _realtimeController.stream.map((incoming) {
+      final previous = _latestData ?? _initialData ?? incoming;
+      final metricsChanged = _metricsChanged(previous, incoming);
+      final chartChanged = _weeklyChanged(previous.weekly, incoming.weekly);
+
+      if (mounted && (metricsChanged || chartChanged)) {
+        setState(() {
+          _latestData = incoming;
+          _lastRefresh = DateTime.now();
+        });
+      } else {
+        _latestData = incoming;
+        _lastRefresh = DateTime.now();
+      }
+
+      return incoming;
     });
+  }
+
+  bool _metricsChanged(DashboardData previous, DashboardData current) {
+    return previous.instructores != current.instructores ||
+        previous.aprendices != current.aprendices ||
+        previous.funcionarios != current.funcionarios ||
+        previous.visitantes != current.visitantes;
+  }
+
+  bool _weeklyChanged(
+    List<WeeklyAttendance> previous,
+    List<WeeklyAttendance> current,
+  ) {
+    if (identical(previous, current)) return false;
+    if (previous.length != current.length) return true;
+    for (var i = 0; i < previous.length; i++) {
+      if (previous[i].label != current[i].label ||
+          previous[i].value != current[i].value) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<void> _handleManualRefresh() async {
     await _realtimeController.manualRefresh();
-    if (_dashboardStream == null) {
-      _setupRealtimeStreams();
-    } else {
-      _realtimeController.startRealtime();
-    }
   }
 
   @override
@@ -183,145 +197,125 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    final baselineData = _latestData ?? _dashboardData ?? DashboardData.mock();
+    final baselineData = _latestData ?? _initialData ?? DashboardData.mock();
 
-    return StreamBuilder<DashboardData>(
-      stream: _dashboardStream,
-      initialData: baselineData,
-      builder: (context, snapshot) {
-        final data = snapshot.data ?? baselineData;
-        final bool realtimeTick =
-            snapshot.connectionState == ConnectionState.active ||
-            snapshot.connectionState == ConnectionState.done;
-        final lastRefresh = realtimeTick ? DateTime.now() : _lastRefresh;
-        final lastRefreshLabel =
-            lastRefresh != null
-                ? DateFormat('HH:mm:ss').format(lastRefresh)
-                : null;
-
-        return Scaffold(
-          backgroundColor: AdminTheme.background,
-          appBar: AppBar(
-            titleSpacing: 20,
-            title: Row(
-              children: [
-                Container(
-                  height: 44,
-                  width: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.18),
-                  ),
-                  child: const Icon(
-                    Icons.dashboard_rounded,
-                    color: Colors.white,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                const Text('Dashboard de Visitantes SENA'),
-              ],
+    return Scaffold(
+      backgroundColor: AdminTheme.background,
+      appBar: AppBar(
+        titleSpacing: 20,
+        title: Row(
+          children: [
+            Container(
+              height: 44,
+              width: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.18),
+              ),
+              child: const Icon(
+                Icons.dashboard_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
             ),
-            actions: [
-              if (_socketStatusStream != null)
-                StreamBuilder<SocketStatus>(
-                  stream: _socketStatusStream,
-                  initialData: SocketStatus.connecting,
-                  builder: (context, statusSnapshot) {
-                    final status = statusSnapshot.data ?? SocketStatus.idle;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: _buildSocketStatusPill(status),
-                    );
-                  },
-                ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.access_time_rounded,
-                      size: 18,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      DateFormat('HH:mm:ss').format(_currentTime),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Actualizar manualmente',
-                onPressed: _handleManualRefresh,
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          body: LayoutBuilder(
-            builder: (context, constraints) {
-              final horizontalPadding = (constraints.maxWidth * 0.05).clamp(
-                24.0,
-                60.0,
-              );
-              final verticalPadding = (constraints.maxHeight * 0.05).clamp(
-                18.0,
-                32.0,
-              );
-              final availableWidth =
-                  constraints.maxWidth - (horizontalPadding * 2);
-              final cardTooltip =
-                  lastRefreshLabel == null
-                      ? null
-                      : 'Última actualización: $lastRefreshLabel';
-
+            const SizedBox(width: 16),
+            const Text('Dashboard de Visitantes SENA'),
+          ],
+        ),
+        actions: [
+          StreamBuilder<SocketStatus>(
+            stream: _socketStatusStream,
+            initialData: SocketStatus.connecting,
+            builder: (context, snapshot) {
+              final status = snapshot.data ?? SocketStatus.idle;
               return Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: horizontalPadding,
-                  vertical: verticalPadding,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Flexible(
-                      flex: 3,
-                      child: AnimatedOpacity(
-                        opacity: _contentVisible ? 1 : 0,
-                        duration: const Duration(milliseconds: 450),
-                        child: _buildMetricCards(
-                          availableWidth,
-                          data,
-                          cardTooltip,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Expanded(
-                      flex: 5,
-                      child: FadeInUp(
-                        duration: const Duration(milliseconds: 600),
-                        child: AdminChartPanel(
-                          data: data.weekly,
-                          barColor: AdminTheme.accentLime,
-                          lineColor: AdminTheme.appBar,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    _buildFooter(),
-                  ],
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: _buildSocketStatusPill(status),
               );
             },
           ),
-        );
-      },
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.access_time_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  DateFormat('HH:mm:ss').format(_currentTime),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Actualizar manualmente',
+            onPressed: _handleManualRefresh,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontalPadding = (constraints.maxWidth * 0.05).clamp(
+            24.0,
+            60.0,
+          );
+          final verticalPadding = (constraints.maxHeight * 0.05).clamp(
+            18.0,
+            32.0,
+          );
+          final availableWidth = constraints.maxWidth - (horizontalPadding * 2);
+
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: verticalPadding,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Flexible(
+                  flex: 3,
+                  child: _buildMetricCards(
+                    availableWidth,
+                    baselineData,
+                    _lastRefresh != null
+                        ? 'Última actualización: ${DateFormat('HH:mm:ss').format(_lastRefresh!)}'
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Expanded(
+                  flex: 5,
+                  child: StreamBuilder<DashboardData>(
+                    stream: _dashboardStream,
+                    initialData: baselineData,
+                    builder: (context, snapshot) {
+                      final chartData = snapshot.data ?? baselineData;
+                      return AdminChartPanel(
+                        data: chartData.weekly,
+                        barColor: AdminTheme.accentLime,
+                        lineColor: AdminTheme.appBar,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _buildFooter(),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -380,20 +374,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         spacing: spacing,
         runSpacing: spacing,
         children: [
-          for (var i = 0; i < metrics.length; i++)
+          for (final metric in metrics)
             SizedBox(
               width: itemWidth,
-              child: FadeInDown(
-                duration: const Duration(milliseconds: 480),
-                delay: Duration(milliseconds: 80 * i),
-                child: StatCard(
-                  title: metrics[i].$1,
-                  value: metrics[i].$2,
-                  icon: metrics[i].$3,
-                  color: metrics[i].$4,
-                  variation: metrics[i].$5,
-                  tooltip: tooltip,
-                ),
+              child: StatCard(
+                title: metric.$1,
+                value: metric.$2,
+                icon: metric.$3,
+                color: metric.$4,
+                variation: metric.$5,
+                tooltip: tooltip,
               ),
             ),
         ],

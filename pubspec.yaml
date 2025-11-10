@@ -19,7 +19,6 @@ dependencies:
 
   # Charts (versión estable compatible)
   fl_chart: ^0.68.0
-  animate_do: ^3.0.2
 
   # Icons
   cupertino_icons: ^1.0.2

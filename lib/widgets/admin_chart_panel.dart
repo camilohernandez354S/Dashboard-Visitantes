@@ -1,10 +1,12 @@
+import 'dart:math';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../theme/admin_theme.dart';
+import '../utils/color_utils.dart';
 
-/// Panel de estadísticas con gráfico combinado (barras + línea) estilo AdminLTE.
 class AdminChartPanel extends StatelessWidget {
   const AdminChartPanel({
     super.key,
@@ -48,10 +50,7 @@ class AdminChartPanel extends StatelessWidget {
     final total = values.fold<int>(0, (prev, el) => prev + el);
     final spots = _buildMovingAverageSpots(values);
     final labels = data.map((e) => e.label).toList();
-    final maxY =
-        (values.reduce((a, b) => a > b ? a : b) * 1.25)
-            .clamp(10, 9999)
-            .toDouble();
+    final maxY = max(values.reduce(max), 10) * 1.2;
 
     return Container(
       decoration: BoxDecoration(
@@ -74,7 +73,7 @@ class AdminChartPanel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                '📊 Estadísticas de registros',
+                '📊 Estadísticas semanales',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
@@ -87,15 +86,15 @@ class AdminChartPanel extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: AdminTheme.accentLime.withOpacity(0.16),
-                  borderRadius: BorderRadius.circular(30),
+                  color: barColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(18),
                 ),
                 child: Text(
-                  'Total: $total',
-                  style: const TextStyle(
-                    fontSize: 14,
+                  'Total semana: $total',
+                  style: TextStyle(
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AdminTheme.accentLime,
+                    color: barColor.darken(0.2),
                   ),
                 ),
               ),
@@ -104,37 +103,42 @@ class AdminChartPanel extends StatelessWidget {
           const SizedBox(height: 24),
           Expanded(
             child: Stack(
-              fit: StackFit.expand,
               children: [
                 BarChart(
                   BarChartData(
                     alignment: BarChartAlignment.spaceAround,
                     maxY: maxY,
                     minY: 0,
-                    gridData: FlGridData(
-                      show: true,
-                      drawVerticalLine: false,
-                      getDrawingHorizontalLine:
-                          (value) => FlLine(
-                            color: AdminTheme.panelBorder,
-                            strokeWidth: 1,
-                          ),
-                    ),
-                    borderData: FlBorderData(show: false),
+                    barTouchData: BarTouchData(enabled: false),
                     titlesData: FlTitlesData(
-                      leftTitles: const AxisTitles(
+                      topTitles: const AxisTitles(
                         sideTitles: SideTitles(showTitles: false),
                       ),
                       rightTitles: const AxisTitles(
                         sideTitles: SideTitles(showTitles: false),
                       ),
-                      topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 40,
+                          getTitlesWidget: (value, meta) {
+                            if (value % 20 != 0) {
+                              return const SizedBox();
+                            }
+                            return Text(
+                              value.toInt().toString(),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: AdminTheme.textMuted,
+                              ),
+                            );
+                          },
+                        ),
                       ),
                       bottomTitles: AxisTitles(
                         sideTitles: SideTitles(
                           showTitles: true,
-                          reservedSize: 34,
                           getTitlesWidget: (value, meta) {
                             final index = value.toInt();
                             if (index < 0 || index >= labels.length) {
@@ -155,25 +159,16 @@ class AdminChartPanel extends StatelessWidget {
                         ),
                       ),
                     ),
-                    barTouchData: BarTouchData(
-                      enabled: true,
-                      touchTooltipData: BarTouchTooltipData(
-                        tooltipRoundedRadius: 10,
-                        getTooltipColor:
-                            (group) => Colors.black.withOpacity(0.82),
-                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                          final label = labels[group.x.toInt()];
-                          return BarTooltipItem(
-                            '$label\n${rod.toY.toInt()} registros',
-                            const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          );
-                        },
-                      ),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      getDrawingHorizontalLine:
+                          (value) => FlLine(
+                            color: AdminTheme.panelBorder,
+                            strokeWidth: 1,
+                          ),
                     ),
+                    borderData: FlBorderData(show: false),
                     barGroups:
                         values
                             .asMap()
@@ -186,17 +181,17 @@ class AdminChartPanel extends StatelessWidget {
                                     toY: entry.value.toDouble(),
                                     width: 22,
                                     borderRadius: BorderRadius.circular(8),
-                                    color: barColor,
-                                    borderSide: BorderSide(
-                                      color: Colors.white.withOpacity(0.4),
-                                      width: 1,
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        barColor.withOpacity(0.85),
+                                        barColor.withOpacity(0.55),
+                                      ],
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
                                     ),
-                                    backDrawRodData: BackgroundBarChartRodData(
-                                      show: true,
-                                      toY: maxY,
-                                      color: AdminTheme.panelBorder.withOpacity(
-                                        0.3,
-                                      ),
+                                    borderSide: BorderSide(
+                                      color: Colors.white.withOpacity(0.6),
+                                      width: 1,
                                     ),
                                   ),
                                 ],
@@ -229,6 +224,39 @@ class AdminChartPanel extends StatelessWidget {
                         ),
                       ],
                     ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final chartHeight = constraints.maxHeight;
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: List.generate(values.length, (index) {
+                          final value = values[index];
+                          final percent =
+                              maxY == 0 ? 0.0 : (value / maxY).clamp(0.0, 1.0);
+                          final bottomPadding = (chartHeight * (1 - percent))
+                              .clamp(0.0, chartHeight);
+                          return Expanded(
+                            child: Container(
+                              alignment: Alignment.bottomCenter,
+                              padding: EdgeInsets.only(
+                                bottom: bottomPadding + 18,
+                              ),
+                              child: Text(
+                                '$value',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AdminTheme.textDark,
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      );
+                    },
                   ),
                 ),
               ],

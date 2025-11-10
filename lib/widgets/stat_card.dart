@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../theme/admin_theme.dart';
 import '../utils/color_utils.dart';
 
 /// Tarjeta estadística inspirada en AdminLTE.
@@ -13,7 +14,8 @@ class StatCard extends StatelessWidget {
     required this.color,
     required this.variation,
     this.tooltip,
-  });
+    Map<String, int>? breakdown,
+  }) : _breakdown = breakdown ?? const {'Modelo': 5, 'Centro': 4, 'Km 11': 3};
 
   final String title;
   final int value;
@@ -21,6 +23,7 @@ class StatCard extends StatelessWidget {
   final Color color;
   final double variation;
   final String? tooltip;
+  final Map<String, int> _breakdown;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +43,7 @@ class StatCard extends StatelessWidget {
     final formattedValue = NumberFormat.decimalPattern().format(value);
 
     final card = Container(
-      height: 122,
+      height: _breakdown.isEmpty ? 122 : 150,
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -54,76 +57,94 @@ class StatCard extends StatelessWidget {
         ],
         border: Border.all(color: color.withOpacity(0.12), width: 1),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withOpacity(0.18),
-            ),
-            child: Icon(icon, size: 28, color: color.darken(0.1)),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  title.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF6C757D),
-                    letterSpacing: 0.6,
-                  ),
+          Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withOpacity(0.18),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                child: Icon(icon, size: 28, color: color.darken(0.1)),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      formattedValue,
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: color.darken(0.15),
-                        height: 1,
+                      title.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF6C757D),
+                        letterSpacing: 0.6,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: variationColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(variationIcon, size: 14, color: variationColor),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${variation.abs().toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: variationColor,
-                            ),
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          formattedValue,
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            color: color.darken(0.15),
+                            height: 1,
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: variationColor.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                variationIcon,
+                                size: 14,
+                                color: variationColor,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${variation.abs().toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: variationColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+          if (_breakdown.isNotEmpty) const SizedBox(height: 12),
+          if (_breakdown.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children:
+                  _breakdown.entries
+                      .map((entry) => _buildSubSedeChip(entry.key, entry.value))
+                      .toList(),
+            ),
         ],
       ),
     );
@@ -132,5 +153,50 @@ class StatCard extends StatelessWidget {
       return card;
     }
     return Tooltip(message: tooltip!, preferBelow: false, child: card);
+  }
+
+  Widget _buildSubSedeChip(String label, int value) {
+    final Color chipColor = _colorForLabel(label, base: color);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: chipColor.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: chipColor.withOpacity(0.2), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: chipColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$label: $value',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: AdminTheme.textDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _colorForLabel(String label, {required Color base}) {
+    switch (label.toLowerCase()) {
+      case 'modelo':
+        return const Color(0xFF28A745);
+      case 'centro':
+        return const Color(0xFF007BFF);
+      case 'km 11':
+      case 'km11':
+        return const Color(0xFFF39C12);
+      default:
+        return base;
+    }
   }
 }

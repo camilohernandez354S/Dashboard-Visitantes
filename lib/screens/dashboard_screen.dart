@@ -18,7 +18,6 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late final DashboardRealtimeController _realtimeController;
-  late final Stream<DashboardData> _dashboardStream;
   late final Stream<SocketStatus> _socketStatusStream;
 
   DashboardData? _initialData;
@@ -80,45 +79,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _setupRealtimeStreams() {
     _realtimeController.startRealtime();
     _socketStatusStream = _realtimeController.socketStatus;
-    _dashboardStream = _realtimeController.stream.map((incoming) {
-      final previous = _latestData ?? _initialData ?? incoming;
-      final metricsChanged = _metricsChanged(previous, incoming);
-      final chartChanged = _weeklyChanged(previous.weekly, incoming.weekly);
-
-      if (mounted && (metricsChanged || chartChanged)) {
-        setState(() {
-          _latestData = incoming;
-          _lastRefresh = DateTime.now();
-        });
-      } else {
-        _latestData = incoming;
-        _lastRefresh = DateTime.now();
-      }
-
-      return incoming;
-    });
-  }
-
-  bool _metricsChanged(DashboardData previous, DashboardData current) {
-    return previous.instructores != current.instructores ||
-        previous.aprendices != current.aprendices ||
-        previous.funcionarios != current.funcionarios ||
-        previous.visitantes != current.visitantes;
-  }
-
-  bool _weeklyChanged(
-    List<WeeklyAttendance> previous,
-    List<WeeklyAttendance> current,
-  ) {
-    if (identical(previous, current)) return false;
-    if (previous.length != current.length) return true;
-    for (var i = 0; i < previous.length; i++) {
-      if (previous[i].label != current[i].label ||
-          previous[i].value != current[i].value) {
-        return true;
-      }
-    }
-    return false;
   }
 
   Future<void> _handleManualRefresh() async {
@@ -296,17 +256,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 18),
                 Expanded(
                   flex: 5,
-                  child: StreamBuilder<DashboardData>(
-                    stream: _dashboardStream,
-                    initialData: baselineData,
-                    builder: (context, snapshot) {
-                      final chartData = snapshot.data ?? baselineData;
-                      return AdminChartPanel(
-                        data: chartData.weekly,
-                        barColor: AdminTheme.accentLime,
-                        lineColor: AdminTheme.appBar,
-                      );
-                    },
+                  child: AdminChartPanel(
+                    data: baselineData.weekly,
+                    barColor: AdminTheme.accentLime,
+                    lineColor: AdminTheme.appBar,
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -332,6 +285,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.person_3_rounded,
         AdminTheme.primaryBlue,
         data.variationFor('instructores'),
+        const {'Modelo': 12, 'Centro': 9, 'Km 11': 6},
       ),
       (
         'Aprendiz',
@@ -339,6 +293,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.school_rounded,
         AdminTheme.successGreen,
         data.variationFor('aprendices'),
+        const {'Modelo': 48, 'Centro': 62, 'Km 11': 35},
       ),
       (
         'Funcionario',
@@ -346,6 +301,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.badge_rounded,
         AdminTheme.warningAmber,
         data.variationFor('funcionarios'),
+        const {'Modelo': 8, 'Centro': 10, 'Km 11': 5},
       ),
       (
         'Visitante',
@@ -353,6 +309,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.directions_walk_rounded,
         AdminTheme.infoTeal,
         data.variationFor('visitantes'),
+        const {'Modelo': 3, 'Centro': 3, 'Km 11': 2},
       ),
     ];
 
@@ -384,6 +341,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 color: metric.$4,
                 variation: metric.$5,
                 tooltip: tooltip,
+                breakdown: metric.$6,
               ),
             ),
         ],

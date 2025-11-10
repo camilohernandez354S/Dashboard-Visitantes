@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
-import 'theme/app_theme.dart';
+import 'theme/admin_theme.dart';
 
 void main() {
   // Capturar errores de Flutter y mostrarlos en consola
@@ -29,7 +29,7 @@ class DashboardVisitantesApp extends StatelessWidget {
     return MaterialApp(
       title: 'Dashboard Visitantes SENA',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
+      theme: AdminTheme.buildTheme(),
       home: const DashboardScreen(),
     );
   }

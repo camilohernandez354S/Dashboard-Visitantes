@@ -13,11 +13,16 @@ dependencies:
   # HTTP Client
   http: ^1.2.2
 
-  # Icons
-  cupertino_icons: ^1.0.2
+  # Tipografías y formato
+  google_fonts: ^6.2.1
+  intl: ^0.19.0
 
   # Charts (versión estable compatible)
   fl_chart: ^0.68.0
+
+  # Icons
+  cupertino_icons: ^1.0.2
+  web_socket_channel: ^3.0.1
 
 dev_dependencies:
   flutter_test:

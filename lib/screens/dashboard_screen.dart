@@ -1,10 +1,14 @@
-import 'package:flutter/material.dart';
-import '../services/api_service.dart';
-import '../widgets/stat_card.dart';
-import '../widgets/visitors_chart.dart';
-import '../theme/app_theme.dart';
+import 'dart:async';
 
-/// Pantalla principal del Dashboard - Compacto y profesional
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../providers/dashboard_realtime_controller.dart';
+import '../services/api_service.dart';
+import '../theme/admin_theme.dart';
+import '../widgets/admin_chart_panel.dart';
+import '../widgets/stat_card.dart';
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -13,61 +17,135 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  Map<String, dynamic>? data;
-  bool loading = true;
-  String? error;
-  DateTime? lastUpdate;
+  late final DashboardRealtimeController _realtimeController;
+  late final Stream<DashboardData> _dashboardStream;
+  late final Stream<SocketStatus> _socketStatusStream;
+
+  DashboardData? _initialData;
+  DashboardData? _latestData;
+  bool _loading = true;
+  String? _errorMessage;
+  DateTime _currentTime = DateTime.now();
+  DateTime? _lastRefresh;
+  Timer? _clockTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _realtimeController = DashboardRealtimeController();
+    _startClock();
+    _initializeDashboard();
+    _setupRealtimeStreams();
   }
 
-  /// Carga los datos del dashboard
-  Future<void> _loadData() async {
-    setState(() {
-      loading = true;
-      error = null;
+  void _startClock() {
+    _clockTimer?.cancel();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _currentTime = DateTime.now());
     });
+  }
 
-    try {
-      final result = await ApiService.fetchDashboardData();
+  Future<void> _initializeDashboard() async {
+    await _refreshFromApi(initial: true);
+  }
+
+  Future<void> _refreshFromApi({bool initial = false}) async {
+    if (initial) {
       setState(() {
-        data = result;
-        lastUpdate = DateTime.now();
-      });
-    } catch (e) {
-      setState(() {
-        error = e.toString();
-      });
-    } finally {
-      setState(() {
-        loading = false;
+        _loading = true;
+        _errorMessage = null;
       });
     }
+
+    try {
+      final result = await _realtimeController.loadInitialData();
+      if (!mounted) return;
+      setState(() {
+        _initialData = result;
+        _latestData = result;
+        _lastRefresh = DateTime.now();
+        _loading = false;
+        _errorMessage = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  void _setupRealtimeStreams() {
+    _realtimeController.startRealtime();
+    _socketStatusStream = _realtimeController.socketStatus;
+    _dashboardStream = _realtimeController.stream.map((incoming) {
+      final previous = _latestData ?? _initialData ?? incoming;
+      final metricsChanged = _metricsChanged(previous, incoming);
+      final chartChanged = _weeklyChanged(previous.weekly, incoming.weekly);
+
+      if (mounted && (metricsChanged || chartChanged)) {
+        setState(() {
+          _latestData = incoming;
+          _lastRefresh = DateTime.now();
+        });
+      } else {
+        _latestData = incoming;
+        _lastRefresh = DateTime.now();
+      }
+
+      return incoming;
+    });
+  }
+
+  bool _metricsChanged(DashboardData previous, DashboardData current) {
+    return previous.instructores != current.instructores ||
+        previous.aprendices != current.aprendices ||
+        previous.funcionarios != current.funcionarios ||
+        previous.visitantes != current.visitantes;
+  }
+
+  bool _weeklyChanged(
+    List<WeeklyAttendance> previous,
+    List<WeeklyAttendance> current,
+  ) {
+    if (identical(previous, current)) return false;
+    if (previous.length != current.length) return true;
+    for (var i = 0; i < previous.length; i++) {
+      if (previous[i].label != current[i].label ||
+          previous[i].value != current[i].value) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _handleManualRefresh() async {
+    await _realtimeController.manualRefresh();
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    _realtimeController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Estado de carga
-    if (loading) {
+    if (_loading) {
       return Scaffold(
-        backgroundColor: AppTheme.light.scaffoldBackgroundColor,
+        backgroundColor: AdminTheme.background,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(
-                color: AppTheme.senaPrimary,
-              ),
-              const SizedBox(height: 16),
-              const Text(
+            children: const [
+              CircularProgressIndicator(color: AdminTheme.primaryBlue),
+              SizedBox(height: 16),
+              Text(
                 'Cargando dashboard...',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.black54,
-                ),
+                style: TextStyle(fontSize: 16, color: AdminTheme.textMuted),
               ),
             ],
           ),
@@ -75,261 +153,295 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    // Estado de error
-    if (error != null) {
+    if (_errorMessage != null && _latestData == null) {
       return Scaffold(
-        backgroundColor: AppTheme.light.scaffoldBackgroundColor,
-        appBar: AppBar(
-          title: const Text('Dashboard de Visitantes SENA'),
-        ),
+        backgroundColor: AdminTheme.background,
         body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 64,
-                color: Colors.red,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Ocurrió un error',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _loadData,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.senaPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Extraer datos
-    final aprendices = (data?['aprendices'] ?? 0) as int;
-    final funcionarios = (data?['funcionarios'] ?? 0) as int;
-    final visitantes = (data?['visitantes'] ?? 0) as int;
-
-    return Scaffold(
-      backgroundColor: AppTheme.light.scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFE8F3E8),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.dashboard,
-                color: AppTheme.senaPrimary,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Dashboard de Visitantes SENA',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        centerTitle: true,
-        elevation: 0,
-      ),
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        color: AppTheme.senaPrimary,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            // Header con última actualización
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (lastUpdate != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: Colors.grey.shade600,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _formatTime(lastUpdate!),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                const Icon(
+                  Icons.error_outline_rounded,
+                  size: 72,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No se pudo cargar la información',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AdminTheme.textMuted,
                   ),
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: _initializeDashboard,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Reintentar'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AdminTheme.primaryBlue,
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 20),
+          ),
+        ),
+      );
+    }
 
-            // Grid de tarjetas de estadísticas más compacto
-            LayoutBuilder(
-              builder: (context, c) {
-                int cols = 3;
-                if (c.maxWidth < 800) cols = 2;
-                if (c.maxWidth < 500) cols = 1;
+    final baselineData = _latestData ?? _initialData ?? DashboardData.mock();
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Título de la sección
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        '📊 Estadísticas en tiempo real',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
-                    
-                    // Grid de tarjetas compacto
-                    GridView.count(
-                      crossAxisCount: cols,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 1.6, // Cards más proporcionadas
-                      children: [
-                        StatCard(
-                          title: 'Aprendices',
-                          value: aprendices,
-                          icon: Icons.school,
-                          color: Colors.blue,
-                        ),
-                        StatCard(
-                          title: 'Funcionarios',
-                          value: funcionarios,
-                          icon: Icons.badge,
-                          color: Colors.orange,
-                        ),
-                        StatCard(
-                          title: 'Visitantes',
-                          value: visitantes,
-                          icon: Icons.people,
-                          color: Colors.green,
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              },
-            ),
-
-            // Gráfica semanal compacta
-            VisitorsChart(
-              data: [80, 120, 95, 110, 140, 90, 60],
-              labels: ['L', 'M', 'M', 'J', 'V', 'S', 'D'],
-              color: AppTheme.senaPrimary,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Footer informativo
+    return Scaffold(
+      backgroundColor: AdminTheme.background,
+      appBar: AppBar(
+        titleSpacing: 20,
+        title: Row(
+          children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              height: 44,
+              width: 44,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.18),
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: Colors.grey.shade600,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Los datos se actualizan automáticamente cada minuto',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ),
-                ],
+              child: const Icon(
+                Icons.dashboard_rounded,
+                color: Colors.white,
+                size: 26,
               ),
             ),
+            const SizedBox(width: 16),
+            const Text('Dashboard de Visitantes SENA'),
           ],
         ),
+        actions: [
+          StreamBuilder<SocketStatus>(
+            stream: _socketStatusStream,
+            initialData: SocketStatus.connecting,
+            builder: (context, snapshot) {
+              final status = snapshot.data ?? SocketStatus.idle;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: _buildSocketStatusPill(status),
+              );
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.access_time_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  DateFormat('HH:mm:ss').format(_currentTime),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Actualizar manualmente',
+            onPressed: _handleManualRefresh,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _loadData,
-        backgroundColor: AppTheme.senaPrimary,
-        icon: const Icon(Icons.refresh),
-        label: const Text('Actualizar'),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontalPadding = (constraints.maxWidth * 0.05).clamp(
+            24.0,
+            60.0,
+          );
+          final verticalPadding = (constraints.maxHeight * 0.05).clamp(
+            18.0,
+            32.0,
+          );
+          final availableWidth = constraints.maxWidth - (horizontalPadding * 2);
+
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: verticalPadding,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Flexible(
+                  flex: 3,
+                  child: _buildMetricCards(
+                    availableWidth,
+                    baselineData,
+                    _lastRefresh != null
+                        ? 'Última actualización: ${DateFormat('HH:mm:ss').format(_lastRefresh!)}'
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Expanded(
+                  flex: 5,
+                  child: StreamBuilder<DashboardData>(
+                    stream: _dashboardStream,
+                    initialData: baselineData,
+                    builder: (context, snapshot) {
+                      final chartData = snapshot.data ?? baselineData;
+                      return AdminChartPanel(
+                        data: chartData.weekly,
+                        barColor: AdminTheme.accentLime,
+                        lineColor: AdminTheme.appBar,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _buildFooter(),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  /// Formatea la hora para mostrar
-  String _formatTime(DateTime dt) {
-    return '${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}:'
-        '${dt.second.toString().padLeft(2, '0')}';
+  Widget _buildMetricCards(
+    double availableWidth,
+    DashboardData data,
+    String? tooltip,
+  ) {
+    final spacing = 18.0;
+    final metrics = [
+      (
+        'Instructor',
+        data.instructores,
+        Icons.person_3_rounded,
+        AdminTheme.primaryBlue,
+        data.variationFor('instructores'),
+      ),
+      (
+        'Aprendiz',
+        data.aprendices,
+        Icons.school_rounded,
+        AdminTheme.successGreen,
+        data.variationFor('aprendices'),
+      ),
+      (
+        'Funcionario',
+        data.funcionarios,
+        Icons.badge_rounded,
+        AdminTheme.warningAmber,
+        data.variationFor('funcionarios'),
+      ),
+      (
+        'Visitante',
+        data.visitantes,
+        Icons.directions_walk_rounded,
+        AdminTheme.infoTeal,
+        data.variationFor('visitantes'),
+      ),
+    ];
+
+    int columns;
+    if (availableWidth >= 1300) {
+      columns = 4;
+    } else if (availableWidth >= 860) {
+      columns = 2;
+    } else {
+      columns = 1;
+    }
+
+    final itemWidth = ((availableWidth - (spacing * (columns - 1))) / columns)
+        .clamp(220.0, 520.0);
+
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Wrap(
+        spacing: spacing,
+        runSpacing: spacing,
+        children: [
+          for (final metric in metrics)
+            SizedBox(
+              width: itemWidth,
+              child: StatCard(
+                title: metric.$1,
+                value: metric.$2,
+                icon: metric.$3,
+                color: metric.$4,
+                variation: metric.$5,
+                tooltip: tooltip,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return Align(
+      alignment: Alignment.center,
+      child: Text(
+        '© ${DateTime.now().year} SENA - Dashboard de Visitantes',
+        style: const TextStyle(
+          fontSize: 12,
+          color: AdminTheme.textMuted,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSocketStatusPill(SocketStatus status) {
+    final (Color color, String label) = switch (status) {
+      SocketStatus.connected => (const Color(0xFF20C26D), 'En línea'),
+      SocketStatus.connecting => (Colors.amber, 'Conectando'),
+      SocketStatus.reconnecting => (const Color(0xFFE83E8C), 'Reintentando'),
+      SocketStatus.disconnected => (const Color(0xFFD64545), 'Sin conexión'),
+      SocketStatus.idle => (const Color(0xFF9E9E9E), 'Inactivo'),
+    };
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white54),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

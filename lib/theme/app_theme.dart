@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Tema personalizado del Dashboard SENA
 class AppTheme {
@@ -26,24 +27,24 @@ class AppTheme {
         ),
         
         // Tipografía profesional
-        textTheme: const TextTheme(
-          titleLarge: TextStyle(
-            fontWeight: FontWeight.bold,
+        textTheme: GoogleFonts.robotoTextTheme().copyWith(
+          titleLarge: GoogleFonts.roboto(
+            fontWeight: FontWeight.w700,
             fontSize: 24,
-            color: Colors.black87,
+            color: const Color(0xFF2B2B2B),
           ),
-          titleMedium: TextStyle(
+          titleMedium: GoogleFonts.roboto(
             fontWeight: FontWeight.w600,
             fontSize: 18,
-            color: Colors.black87,
+            color: const Color(0xFF2B2B2B),
           ),
-          bodyLarge: TextStyle(
+          bodyLarge: GoogleFonts.roboto(
             fontSize: 16,
-            color: Colors.black87,
+            color: const Color(0xFF2B2B2B),
           ),
-          bodyMedium: TextStyle(
+          bodyMedium: GoogleFonts.roboto(
             fontSize: 14,
-            color: Colors.black54,
+            color: const Color(0xFF555555),
           ),
         ),
         

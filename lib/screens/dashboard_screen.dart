@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../providers/dashboard_realtime_controller.dart';
 import '../services/api_service.dart';
+import '../services/socket_service.dart';
 import '../theme/admin_theme.dart';
-import '../widgets/admin_chart_panel.dart';
+import '../widgets/daily_trend_panel.dart';
 import '../widgets/stat_card.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime _currentTime = DateTime.now();
   DateTime? _lastRefresh;
   Timer? _clockTimer;
+  bool _isFullscreen = false;
 
   @override
   void initState() {
@@ -85,10 +88,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _realtimeController.manualRefresh();
   }
 
+  void _toggleFullscreen() {
+    setState(() => _isFullscreen = !_isFullscreen);
+    if (_isFullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+  }
+
   @override
   void dispose() {
     _clockTimer?.cancel();
     _realtimeController.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
@@ -159,70 +172,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final baselineData = _latestData ?? _initialData ?? DashboardData.mock();
 
-    return Scaffold(
-      backgroundColor: AdminTheme.background,
-      appBar: AppBar(
-        titleSpacing: 20,
-        title: Row(
-          children: [
-            Container(
-              height: 44,
-              width: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.18),
+    final appBar =
+        _isFullscreen
+            ? null
+            : AppBar(
+              titleSpacing: 20,
+              title: Row(
+                children: [
+                  Container(
+                    height: 44,
+                    width: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.18),
+                    ),
+                    child: const Icon(
+                      Icons.dashboard_rounded,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Text('Dashboard de Visitantes SENA'),
+                ],
               ),
-              child: const Icon(
-                Icons.dashboard_rounded,
-                color: Colors.white,
-                size: 26,
-              ),
-            ),
-            const SizedBox(width: 16),
-            const Text('Dashboard de Visitantes SENA'),
-          ],
-        ),
-        actions: [
-          StreamBuilder<SocketStatus>(
-            stream: _socketStatusStream,
-            initialData: SocketStatus.connecting,
-            builder: (context, snapshot) {
-              final status = snapshot.data ?? SocketStatus.idle;
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: _buildSocketStatusPill(status),
-              );
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.access_time_rounded,
-                  size: 18,
-                  color: Colors.white,
+              actions: [
+                StreamBuilder<SocketStatus>(
+                  stream: _socketStatusStream,
+                  initialData: SocketStatus.connecting,
+                  builder: (context, snapshot) {
+                    final status = snapshot.data ?? SocketStatus.idle;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: _buildSocketStatusPill(status),
+                    );
+                  },
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  DateFormat('HH:mm:ss').format(_currentTime),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.access_time_rounded,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        DateFormat('HH:mm:ss').format(_currentTime),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                IconButton(
+                  tooltip: 'Actualizar manualmente',
+                  onPressed: _handleManualRefresh,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Modo pantalla completa',
+                  onPressed: _toggleFullscreen,
+                  icon: const Icon(Icons.fullscreen),
+                ),
               ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Actualizar manualmente',
-            onPressed: _handleManualRefresh,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
+            );
+
+    final scaffold = Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: appBar,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final horizontalPadding = (constraints.maxWidth * 0.05).clamp(
@@ -251,33 +274,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: AdminTheme.textMuted,
                   ),
                 ),
+                if (_isFullscreen) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AdminTheme.appBar,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                      ),
+                      onPressed: _toggleFullscreen,
+                      icon: const Icon(Icons.fullscreen_exit_rounded),
+                      label: const Text('Salir de pantalla completa'),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                _buildMetricCards(
+                  availableWidth,
+                  baselineData,
+                  _lastRefresh != null
+                      ? 'Última actualización: ${DateFormat('HH:mm:ss').format(_lastRefresh!)}'
+                      : null,
+                ),
                 const SizedBox(height: 16),
-                Flexible(
-                  flex: 3,
-                  child: _buildMetricCards(
-                    availableWidth,
-                    baselineData,
-                    _lastRefresh != null
-                        ? 'Última actualización: ${DateFormat('HH:mm:ss').format(_lastRefresh!)}'
-                        : null,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Expanded(
-                  flex: 5,
-                  child: AdminChartPanel(
-                    data: baselineData.weekly,
-                    barColor: AdminTheme.accentLime,
-                    lineColor: AdminTheme.appBar,
-                  ),
-                ),
-                const SizedBox(height: 18),
+                _buildExecutiveSummary(baselineData),
+                const SizedBox(height: 16),
+                Expanded(child: DailyTrendPanel(data: baselineData.hourly)),
+                const SizedBox(height: 14),
                 _buildFooter(),
               ],
             ),
           );
         },
       ),
+    );
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFF8FAFC), Color(0xFFF2F5F9)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: scaffold,
     );
   }
 
@@ -295,6 +336,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         AdminTheme.primaryBlue,
         data.variationFor('instructores'),
         const {'Modelo': 12, 'Centro': 9, 'Km 11': 6},
+        const [9, 11, 10, 12, 13, 14, 15],
       ),
       (
         'Aprendiz',
@@ -303,6 +345,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         AdminTheme.successGreen,
         data.variationFor('aprendices'),
         const {'Modelo': 48, 'Centro': 62, 'Km 11': 35},
+        const [120, 125, 130, 140, 150, 145, 155],
       ),
       (
         'Funcionario',
@@ -311,6 +354,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         AdminTheme.warningAmber,
         data.variationFor('funcionarios'),
         const {'Modelo': 8, 'Centro': 10, 'Km 11': 5},
+        const [18, 20, 19, 22, 24, 23, 25],
       ),
       (
         'Visitante',
@@ -319,6 +363,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         AdminTheme.infoTeal,
         data.variationFor('visitantes'),
         const {'Modelo': 3, 'Centro': 3, 'Km 11': 2},
+        const [5, 6, 5, 7, 8, 7, 9],
       ),
     ];
 
@@ -351,8 +396,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 variation: metric.$5,
                 tooltip: tooltip,
                 breakdown: metric.$6,
+                trend: metric.$7,
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExecutiveSummary(DashboardData data) {
+    final total = data.weeklyTotal;
+    final variation = data.variationFor('aprendices');
+    final sedeCentro = 0.48; // Placeholder mientras llegan datos reales.
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AdminTheme.panelBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Resumen ejecutivo',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AdminTheme.textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Esta semana se registraron $total asistencias en total, '
+            'con un crecimiento del ${variation.toStringAsFixed(1)} % frente a la semana anterior. '
+            'La sede Centro concentró aproximadamente el ${(sedeCentro * 100).toStringAsFixed(0)} % de los registros, '
+            'seguida por las sedes Modelo y Km 11.',
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              color: AdminTheme.textMuted,
+            ),
+          ),
         ],
       ),
     );
@@ -381,33 +474,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
       SocketStatus.idle => (const Color(0xFF9E9E9E), 'Inactivo'),
     };
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white54),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      transitionBuilder:
+          (child, animation) => ScaleTransition(
+            scale: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutBack,
             ),
+            child: FadeTransition(opacity: animation, child: child),
           ),
-        ],
+      child: Container(
+        key: ValueKey(label),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white54),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

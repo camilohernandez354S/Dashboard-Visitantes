@@ -1,3 +1,6 @@
+import 'dart:math';
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -15,7 +18,9 @@ class StatCard extends StatelessWidget {
     required this.variation,
     this.tooltip,
     Map<String, int>? breakdown,
-  }) : _breakdown = breakdown ?? const {'Modelo': 5, 'Centro': 4, 'Km 11': 3};
+    List<int>? trend,
+  }) : _breakdown = breakdown ?? const {'Modelo': 5, 'Centro': 4, 'Km 11': 3},
+       _trend = trend ?? const [4, 5, 6, 7, 8, 7, 9];
 
   final String title;
   final int value;
@@ -24,6 +29,7 @@ class StatCard extends StatelessWidget {
   final double variation;
   final String? tooltip;
   final Map<String, int> _breakdown;
+  final List<int> _trend;
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +49,8 @@ class StatCard extends StatelessWidget {
     final formattedValue = NumberFormat.decimalPattern().format(value);
 
     final card = Container(
-      height: _breakdown.isEmpty ? 122 : 150,
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+      constraints: const BoxConstraints(minHeight: 160, maxHeight: 188),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -59,83 +65,123 @@ class StatCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: color.withOpacity(0.18),
                 ),
-                child: Icon(icon, size: 28, color: color.darken(0.1)),
+                child: Icon(icon, size: 26, color: color.darken(0.1)),
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 16),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF6C757D),
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          formattedValue,
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w700,
-                            color: color.darken(0.15),
-                            height: 1,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: variationColor.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                variationIcon,
-                                size: 14,
-                                color: variationColor,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${variation.abs().toStringAsFixed(1)}%',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: variationColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: Text(
+                  title.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    color: Color(0xFF6C757D),
+                  ),
                 ),
               ),
             ],
           ),
-          if (_breakdown.isNotEmpty) const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                formattedValue,
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                  color: color.darken(0.15),
+                  height: 1,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: variationColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(variationIcon, size: 14, color: variationColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${variation.abs().toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: variationColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_trend.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: LineChart(
+                      LineChartData(
+                        minY: _trend.reduce(min).toDouble() - 2,
+                        maxY: _trend.reduce(max).toDouble() + 2,
+                        titlesData: const FlTitlesData(show: false),
+                        gridData: const FlGridData(show: false),
+                        borderData: FlBorderData(show: false),
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots:
+                                _trend
+                                    .asMap()
+                                    .entries
+                                    .map(
+                                      (e) => FlSpot(
+                                        e.key.toDouble(),
+                                        e.value.toDouble(),
+                                      ),
+                                    )
+                                    .toList(),
+                            isCurved: true,
+                            barWidth: 2,
+                            color: color.darken(0.05),
+                            dotData: const FlDotData(show: false),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              gradient: LinearGradient(
+                                colors: [
+                                  color.withOpacity(0.18),
+                                  color.withOpacity(0.04),
+                                ],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
           if (_breakdown.isNotEmpty)
             Wrap(
               spacing: 6,

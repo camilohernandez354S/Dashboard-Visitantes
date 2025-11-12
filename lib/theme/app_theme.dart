@@ -17,11 +17,11 @@ class AppTheme {
     scaffoldBackgroundColor: senaBackground,
 
     // Tema de tarjetas
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: cardWhite,
       elevation: 4,
       shadowColor: Colors.black.withOpacity(0.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
     ),
 
     // Tipografía profesional

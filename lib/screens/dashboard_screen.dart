@@ -67,8 +67,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
+      // ignore: avoid_print
+      print('🔄 [DashboardScreen] Iniciando carga de datos desde API...');
       final result = await _realtimeController.loadInitialData();
       if (!mounted) return;
+      
+      // ignore: avoid_print
+      print(
+        '✅ [DashboardScreen] Datos recibidos - '
+        'Instructores: ${result.instructores}, '
+        'Aprendices: ${result.aprendices}, '
+        'Total registros: ${result.records.length}',
+      );
+      
       setState(() {
         _initialData = result;
         _latestData = result;
@@ -76,8 +87,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _loading = false;
         _errorMessage = null;
       });
-    } catch (e) {
+      
+      // ignore: avoid_print
+      print('✅ [DashboardScreen] Estado actualizado en la UI');
+    } catch (e, stackTrace) {
       if (!mounted) return;
+      // ignore: avoid_print
+      print('❌ [DashboardScreen] Error al cargar datos: $e');
+      // ignore: avoid_print
+      print('Stack trace: $stackTrace');
       setState(() {
         _errorMessage = e.toString();
         _loading = false;

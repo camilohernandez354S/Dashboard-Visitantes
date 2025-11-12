@@ -11,9 +11,10 @@ class DashboardRealtimeController {
     SocketService? socketService,
     AppConfig? config,
     Duration reconnectDelay = const Duration(seconds: 5),
-  }) : _socketService = socketService ?? SocketService(),
-       _config = config ?? AppConfig.fromEnvironment(),
-       _reconnectDelay = reconnectDelay {
+  }) : _config = config ?? AppConfig.fromEnvironment(),
+       _reconnectDelay = reconnectDelay,
+       _socketService = socketService ?? 
+           SocketService(url: (config ?? AppConfig.fromEnvironment()).wsDashboardUrl?.toString()) {
     _statusSubscription = _socketService.statusStream.listen((status) {
       if (!_statusController.isClosed) {
         AppLogger.info('Estado socket → $status', tag: 'Realtime');
@@ -47,18 +48,36 @@ class DashboardRealtimeController {
   /// Obtiene la data inicial desde la API.
   Future<DashboardData> loadInitialData() async {
     AppLogger.info('Cargando datos iniciales del dashboard', tag: 'Realtime');
-    final data = await ApiService.fetchDashboardData();
-    _latest = data;
-    _streamController.add(data);
-    _updateResumeToken();
-    return data;
+    try {
+      final data = await ApiService.fetchDashboardData();
+      _latest = data;
+      // Emitir al stream para que los listeners actualicen la UI
+      _streamController.add(data);
+      _updateResumeToken();
+      AppLogger.info(
+        '✅ Datos iniciales cargados - Total registros: ${data.records.length}',
+        tag: 'Realtime',
+      );
+      return data;
+    } catch (e) {
+      AppLogger.error(
+        'Error al cargar datos iniciales',
+        tag: 'Realtime',
+        err: e,
+      );
+      // Si hay error, retornar datos vacíos en lugar de lanzar excepción
+      final emptyData = DashboardData.fromRecords([]);
+      _latest = emptyData;
+      _streamController.add(emptyData);
+      return emptyData;
+    }
   }
 
   /// Inicia la conexión y escucha del socket.
   void startRealtime() {
     if (!_config.hasWebSocket) {
       AppLogger.warn(
-        'WS_URL no configurado. Permanecerá en modo mock.',
+        'WS_URL no configurado. WebSocket deshabilitado.',
         tag: 'Realtime',
       );
       _statusController.add(SocketStatus.idle);
@@ -88,13 +107,77 @@ class DashboardRealtimeController {
   }
 
   void _onSocketPayload(Map<String, dynamic> payload) {
-    final current = _latest ?? DashboardData.mock();
-    final updated = current.mergeFromSocket(payload);
-    _latest = updated;
-    _streamController.add(updated);
-    _statusController.add(SocketStatus.connected);
-    _updateResumeToken();
-    AppLogger.debug('Payload recibido $payload', tag: 'Realtime');
+    try {
+      final current = _latest;
+      
+      // Si hay un registro nuevo del servidor Node.js
+      if (payload.containsKey('record')) {
+        final registroJson = payload['record'];
+        if (registroJson is Map<String, dynamic>) {
+          // Convertir el registro del servidor a AttendanceRecord
+          final record = AttendanceRecord.fromServerJson(registroJson);
+          
+          // Si no hay datos actuales, cargar desde la API primero
+          if (current == null) {
+            loadInitialData().then((data) {
+              final updated = data.applyRecord(record);
+              _latest = updated;
+              _streamController.add(updated);
+              _statusController.add(SocketStatus.connected);
+              _updateResumeToken();
+              AppLogger.info(
+                'Registro agregado: ${record.name} (${record.role.label})',
+                tag: 'Realtime',
+              );
+            });
+            return;
+          }
+          
+          // Agregar el nuevo registro a los datos actuales
+          AppLogger.info(
+            '📥 Nuevo registro recibido por WebSocket: ${record.name} (${record.role.label})',
+            tag: 'Realtime',
+          );
+          
+          final updated = current.applyRecord(record);
+          _latest = updated;
+          
+          AppLogger.info(
+            '📊 Datos actualizados - Instructores: ${updated.instructores}, '
+            'Aprendices: ${updated.aprendices}, Funcionarios: ${updated.funcionarios}, '
+            'Visitantes: ${updated.visitantes}',
+            tag: 'Realtime',
+          );
+          
+          // Emitir al stream para que la UI se actualice
+          _streamController.add(updated);
+          _statusController.add(SocketStatus.connected);
+          _updateResumeToken();
+          
+          AppLogger.info(
+            '✅ Registro agregado y emitido al stream - Total registros: ${updated.records.length}',
+            tag: 'Realtime',
+          );
+          return;
+        }
+      }
+      
+      // Para otros tipos de payload, usar el método mergeFromSocket existente
+      final baseData = current ?? DashboardData.fromRecords([]);
+      final updated = baseData.mergeFromSocket(payload);
+      _latest = updated;
+      _streamController.add(updated);
+      _statusController.add(SocketStatus.connected);
+      _updateResumeToken();
+      AppLogger.debug('Payload recibido $payload', tag: 'Realtime');
+    } catch (e, s) {
+      AppLogger.error(
+        'Error al procesar payload del socket',
+        tag: 'Realtime',
+        err: e,
+      );
+      AppLogger.debug('Stack trace: $s', tag: 'Realtime');
+    }
   }
 
   void _scheduleReconnect() {

@@ -5,21 +5,17 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 /// URL base de la API configurada via --dart-define
-const String apiBase = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+const String apiBase = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://localhost:3000',
+);
 
 class ApiService {
-  /// Obtiene los datos del dashboard desde la API o desde mock.
-  /// Siempre retorna datos válidos; si hay error se usan valores mock.
+  /// Obtiene los datos del dashboard desde la API.
+  /// Consulta el endpoint /registros y convierte los registros a DashboardData.
   static Future<DashboardData> fetchDashboardData() async {
     try {
-      if (apiBase.isEmpty) {
-        // ignore: avoid_print
-        print('📦 [ApiService] API_BASE_URL vacío → usando datos MOCK');
-        await Future.delayed(const Duration(milliseconds: 350));
-        return DashboardData.mock();
-      }
-
-      final uri = Uri.parse('$apiBase/dashboard');
+      final uri = Uri.parse('$apiBase/registros');
       // ignore: avoid_print
       print('🌐 [ApiService] Consultando: $uri');
 
@@ -33,11 +29,38 @@ class ApiService {
         final dynamic decoded = jsonDecode(resp.body);
 
         if (decoded is Map<String, dynamic>) {
-          return DashboardData.fromJson(decoded);
+          final registrosList = decoded['registros'];
+          if (registrosList is List) {
+            final records = registrosList
+                .whereType<Map<String, dynamic>>()
+                .map((json) {
+                  // Debug: imprimir el JSON raw antes de parsear
+                  // ignore: avoid_print
+                  print('📥 [ApiService] Parseando registro: ${json.toString()}');
+                  return AttendanceRecord.fromServerJson(json);
+                })
+                .where((record) => record.role.isTracked)
+                .toList();
+            
+            // ignore: avoid_print
+            print('📊 [ApiService] ${records.length} registros obtenidos');
+            
+            // Debug: imprimir información de sedes en los registros
+            for (final record in records) {
+              // ignore: avoid_print
+              print('  ✓ Registro: ${record.name} (${record.role.label}) - Sede: ${record.sede ?? "null"}');
+            }
+            
+            if (records.isEmpty) {
+              return DashboardData.fromRecords([]);
+            }
+            
+            return DashboardData.fromRecords(records);
+          }
         }
 
         throw const FormatException(
-          'Formato de respuesta no soportado. Se esperaba un objeto JSON.',
+          'Formato de respuesta no soportado. Se esperaba un objeto con "registros".',
         );
       } else {
         // ignore: avoid_print
@@ -47,13 +70,13 @@ class ApiService {
     } on TimeoutException catch (e) {
       // ignore: avoid_print
       print('⏱️ [ApiService] Timeout: $e');
-      return DashboardData.mock();
+      rethrow;
     } catch (e, s) {
       // ignore: avoid_print
       print('❌ [ApiService] Error inesperado: $e');
       // ignore: avoid_print
       print(s);
-      return DashboardData.mock();
+      rethrow;
     }
   }
 }
@@ -104,10 +127,20 @@ class DashboardData {
 
   DashboardData mergeFromSocket(Map<String, dynamic> payload) {
     if (payload['record'] is Map<String, dynamic>) {
-      final record = AttendanceRecord.fromJson(
-        payload['record'] as Map<String, dynamic>,
-      );
-      return _applyRecord(record);
+      final recordJson = payload['record'] as Map<String, dynamic>;
+      // Intentar usar fromServerJson primero (formato del servidor Node.js)
+      // Si no funciona, usar fromJson (formato genérico)
+      AttendanceRecord record;
+      try {
+        if (recordJson.containsKey('hora') && recordJson.containsKey('rol')) {
+          record = AttendanceRecord.fromServerJson(recordJson);
+        } else {
+          record = AttendanceRecord.fromJson(recordJson);
+        }
+      } catch (e) {
+        record = AttendanceRecord.fromJson(recordJson);
+      }
+      return applyRecord(record);
     }
 
     final parsedRecords = _parseRecordsList(payload['records']);
@@ -159,7 +192,7 @@ class DashboardData {
     );
   }
 
-  DashboardData _applyRecord(AttendanceRecord record) {
+  DashboardData applyRecord(AttendanceRecord record) {
     if (!record.role.isTracked) return this;
     final updatedRecords = List<AttendanceRecord>.from(records)..add(record);
     return DashboardData.fromRecords(updatedRecords, previousRecords: records);
@@ -229,8 +262,12 @@ class DashboardData {
               ? json['visitantes'] as int
               : (json['visitantes'] as num?)?.toInt() ?? 0,
       variations: variationsMap,
-      weekly: weeklyList.isNotEmpty ? weeklyList : WeeklyAttendance.mockWeek(),
-      hourly: hourlyList.isNotEmpty ? hourlyList : HourlyAttendance.mockDay(),
+      weekly: weeklyList.isNotEmpty 
+          ? weeklyList 
+          : WeeklyAttendance.fromRecords([]),
+      hourly: hourlyList.isNotEmpty 
+          ? hourlyList 
+          : HourlyAttendance.fromRecords([]),
       records: const [],
     );
   }
@@ -257,8 +294,9 @@ class DashboardData {
     double variationForRole(AttendanceRole role) {
       final actual = currentCounts[role]!.toDouble();
       final previousTotal = previousCounts[role]!.toDouble();
+      // Si no hay datos previos, la variación es 0 (no hay comparación)
       if (previousTotal <= 0) {
-        return actual > 0 ? 100.0 : 0.0;
+        return 0.0;
       }
       final delta = ((actual - previousTotal) / previousTotal) * 100;
       return (delta * 10).roundToDouble() / 10;
@@ -335,6 +373,110 @@ class DashboardData {
       records.isNotEmpty ? records.last.recordedAt : null;
 
   String? get resumeToken => latestRecordAt?.toUtc().toIso8601String();
+
+  /// Calcula el breakdown por sede para un rol específico.
+  /// Retorna un mapa con el nombre de la sede y el conteo.
+  Map<String, int> getBreakdownBySede(AttendanceRole role) {
+    final sedeCounts = <String, int>{};
+    
+    // Debug: imprimir información de los registros
+    // ignore: avoid_print
+    print('🔍 [getBreakdownBySede] Calculando breakdown para rol: ${role.label}');
+    // ignore: avoid_print
+    print('🔍 [getBreakdownBySede] Total registros: ${records.length}');
+    
+    for (final record in records) {
+      if (record.role == role) {
+        final sede = record.sede ?? 'Sin sede';
+        sedeCounts[sede] = (sedeCounts[sede] ?? 0) + 1;
+        // Debug: imprimir cada registro que coincide
+        // ignore: avoid_print
+        print('  ✓ Registro: ${record.name} - Sede: "$sede" (original: ${record.sede})');
+      }
+    }
+    
+    // Debug: imprimir resultado
+    // ignore: avoid_print
+    print('📊 [getBreakdownBySede] Breakdown para ${role.label}: $sedeCounts');
+    
+    // Si no hay registros, retornar mapa vacío
+    if (sedeCounts.isEmpty) {
+      // ignore: avoid_print
+      print('⚠️ [getBreakdownBySede] No se encontraron registros para ${role.label}');
+      return {};
+    }
+    
+    return sedeCounts;
+  }
+
+  /// Calcula el trend semanal (últimos 7 días) para un rol específico.
+  /// Retorna una lista de 7 valores, uno por cada día de la semana.
+  List<int> getWeeklyTrend(AttendanceRole role) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    // Calcular el inicio de la semana (lunes)
+    final daysFromMonday = now.weekday - DateTime.monday;
+    final weekStart = today.subtract(Duration(days: daysFromMonday));
+    
+    // Crear contadores para cada día de la semana
+    final dayCounts = <int, int>{
+      for (int i = 0; i < 7; i++) i: 0,
+    };
+    
+    // Contar registros por día de la semana actual
+    for (final record in records) {
+      if (record.role != role) continue;
+      
+      final recordDate = DateTime(
+        record.recordedAt.year,
+        record.recordedAt.month,
+        record.recordedAt.day,
+      );
+      
+      // Verificar si el registro está en la semana actual
+      final daysDiff = recordDate.difference(weekStart).inDays;
+      if (daysDiff >= 0 && daysDiff < 7) {
+        dayCounts[daysDiff] = (dayCounts[daysDiff] ?? 0) + 1;
+      }
+    }
+    
+    // Retornar lista ordenada (lunes a domingo)
+    return [
+      dayCounts[0] ?? 0,
+      dayCounts[1] ?? 0,
+      dayCounts[2] ?? 0,
+      dayCounts[3] ?? 0,
+      dayCounts[4] ?? 0,
+      dayCounts[5] ?? 0,
+      dayCounts[6] ?? 0,
+    ];
+  }
+
+  /// Calcula la distribución por sede de todos los registros.
+  /// Retorna un mapa con el nombre de la sede y el porcentaje (0.0 a 1.0).
+  Map<String, double> getSedeDistribution() {
+    if (records.isEmpty) {
+      return {};
+    }
+    
+    final sedeCounts = <String, int>{};
+    int total = 0;
+    
+    for (final record in records) {
+      final sede = record.sede ?? 'Sin sede';
+      sedeCounts[sede] = (sedeCounts[sede] ?? 0) + 1;
+      total++;
+    }
+    
+    if (total == 0) {
+      return {};
+    }
+    
+    return sedeCounts.map(
+      (key, value) => MapEntry(key, value / total),
+    );
+  }
 }
 
 /// Modelo de asistencias diarias para la gráfica combinada.
@@ -355,10 +497,6 @@ class WeeklyAttendance {
   }
 
   static List<WeeklyAttendance> fromRecords(List<AttendanceRecord> records) {
-    if (records.isEmpty) {
-      return mockWeek();
-    }
-
     final totals = <int, int>{
       DateTime.monday: 0,
       DateTime.tuesday: 0,
@@ -406,14 +544,9 @@ class HourlyAttendance {
   const HourlyAttendance({required this.hour, required this.value});
 
   static List<HourlyAttendance> fromRecords(List<AttendanceRecord> records) {
-    if (records.isEmpty) {
-      return mockDay();
-    }
-
-    final sorted = List<AttendanceRecord>.from(records)
-      ..sort((a, b) => a.recordedAt.compareTo(b.recordedAt));
-    final latest = sorted.last.recordedAt;
-    final dayDate = DateTime(latest.year, latest.month, latest.day);
+    // Si no hay registros, retornar horas vacías (todas en 0)
+    final now = DateTime.now();
+    final dayDate = DateTime(now.year, now.month, now.day);
 
     final start = DateTime(
       dayDate.year,
@@ -421,14 +554,43 @@ class HourlyAttendance {
       dayDate.day,
       _hourStart,
     );
-    final endExclusive = start.add(
-      Duration(hours: _baseHourlyDistribution.length),
-    );
     final hourFormatter = DateFormat('HH:00');
 
     final hours = List<DateTime>.generate(
       _baseHourlyDistribution.length,
       (index) => start.add(Duration(hours: index)),
+    );
+
+    if (records.isEmpty) {
+      return hours
+          .map(
+            (dt) => HourlyAttendance(
+              hour: hourFormatter.format(dt),
+              value: 0,
+            ),
+          )
+          .toList();
+    }
+
+    final sorted = List<AttendanceRecord>.from(records)
+      ..sort((a, b) => a.recordedAt.compareTo(b.recordedAt));
+    final latest = sorted.last.recordedAt;
+    final latestDayDate = DateTime(latest.year, latest.month, latest.day);
+
+    // Usar la fecha del último registro, o la fecha actual si es hoy
+    final targetDate = latestDayDate.year == dayDate.year &&
+            latestDayDate.month == dayDate.month &&
+            latestDayDate.day == dayDate.day
+        ? dayDate
+        : latestDayDate;
+    final targetStart = DateTime(
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+      _hourStart,
+    );
+    final targetEndExclusive = targetStart.add(
+      Duration(hours: _baseHourlyDistribution.length),
     );
 
     final counts = {for (final hour in hours) hourFormatter.format(hour): 0};
@@ -439,16 +601,16 @@ class HourlyAttendance {
         record.recordedAt.month,
         record.recordedAt.day,
       );
-      if (recordDay != dayDate) continue;
-      if (record.recordedAt.isBefore(start) ||
-          !record.recordedAt.isBefore(endExclusive)) {
+      if (recordDay != targetDate) continue;
+      if (record.recordedAt.isBefore(targetStart) ||
+          !record.recordedAt.isBefore(targetEndExclusive)) {
         continue;
       }
       final slotLabel = hourFormatter.format(
         DateTime(
-          dayDate.year,
-          dayDate.month,
-          dayDate.day,
+          targetDate.year,
+          targetDate.month,
+          targetDate.day,
           record.recordedAt.hour,
         ),
       );
@@ -606,6 +768,48 @@ class AttendanceRecord {
     );
   }
 
+  /// Parsea un registro del servidor Node.js.
+  /// Formato: { "id": number, "nombre": string, "rol": string, "hora": "HH:MM:SS AM/PM", "sede": string? }
+  factory AttendanceRecord.fromServerJson(Map<String, dynamic> json) {
+    final role = parseAttendanceRole(json['rol']);
+    final rawName = (json['nombre'] ?? '').toString().trim();
+    final horaStr = (json['hora'] ?? '').toString().trim();
+    
+    // Parsear sede - puede ser null o string
+    // El servidor puede enviar sede como string, null, o no enviar el campo
+    String? sede;
+    if (json.containsKey('sede')) {
+      final sedeValue = json['sede'];
+      if (sedeValue != null) {
+        final sedeRaw = sedeValue.toString().trim();
+        sede = sedeRaw.isNotEmpty ? sedeRaw : null;
+      } else {
+        sede = null;
+      }
+    } else {
+      sede = null;
+    }
+    
+    // Debug: imprimir sede para verificar
+    if (sede != null) {
+      // ignore: avoid_print
+      print('✅ [AttendanceRecord] Sede parseada: "$sede" para registro: ${json['nombre']} (${json['rol']})');
+    } else {
+      // ignore: avoid_print
+      print('⚠️ [AttendanceRecord] Sede es null para registro: ${json['nombre']} (${json['rol']}) - JSON contiene sede: ${json.containsKey('sede')}, valor: ${json['sede']}');
+    }
+    
+    // Convertir hora del servidor (formato "HH:MM:SS AM/PM") a DateTime
+    final recordedAt = _parseServerHora(horaStr) ?? DateTime.now();
+    
+    return AttendanceRecord(
+      role: role,
+      name: rawName.isNotEmpty ? rawName : role.label,
+      recordedAt: recordedAt,
+      sede: sede,
+    );
+  }
+
   static DateTime? _parseDateTime(dynamic raw) {
     if (raw is DateTime) return raw;
     if (raw is int) {
@@ -615,6 +819,53 @@ class AttendanceRecord {
       return DateTime.tryParse(raw);
     }
     return null;
+  }
+
+  /// Parsea una hora en formato "HH:MM:SS AM/PM" del servidor Node.js.
+  /// Convierte a DateTime usando la fecha actual.
+  static DateTime? _parseServerHora(String horaStr) {
+    if (horaStr.isEmpty) return null;
+    
+    try {
+      // Formato esperado: "10:35:45 AM" o "2:05:30 PM"
+      final parts = horaStr.split(' ');
+      if (parts.length != 2) return null;
+      
+      final timePart = parts[0].trim();
+      final ampm = parts[1].trim().toUpperCase();
+      
+      final timeComponents = timePart.split(':');
+      if (timeComponents.length < 2) return null;
+      
+      var hour = int.tryParse(timeComponents[0]);
+      final minute = int.tryParse(timeComponents[1]);
+      final second = timeComponents.length > 2 
+          ? int.tryParse(timeComponents[2]) ?? 0 
+          : 0;
+      
+      if (hour == null || minute == null) return null;
+      
+      // Convertir a formato 24 horas
+      if (ampm == 'PM' && hour != 12) {
+        hour += 12;
+      } else if (ampm == 'AM' && hour == 12) {
+        hour = 0;
+      }
+      
+      final now = DateTime.now();
+      return DateTime(
+        now.year,
+        now.month,
+        now.day,
+        hour,
+        minute,
+        second,
+      );
+    } catch (e) {
+      // ignore: avoid_print
+      print('⚠️ [AttendanceRecord] Error al parsear hora: $horaStr - $e');
+      return null;
+    }
   }
 
   static List<AttendanceRecord> mockWeek({

@@ -10,7 +10,7 @@ enum SocketStatus { idle, connecting, connected, reconnecting, disconnected }
 /// Endpoint WebSocket configurable via `--dart-define=WS_URL=...`
 const String defaultSocketUrl = String.fromEnvironment(
   'WS_URL',
-  defaultValue: '',
+  defaultValue: 'ws://localhost:8080',
 );
 
 /// Servicio encargado de gestionar la conexión WebSocket del dashboard.
@@ -153,6 +153,22 @@ class SocketService {
         if (payload is Map<String, dynamic>) {
           _controller.add(Map<String, dynamic>.from(payload));
         }
+        return;
+      case 'nuevo_registro':
+        // Manejar mensaje del servidor Node.js
+        final registro = message['registro'];
+        if (registro is Map<String, dynamic>) {
+          AppLogger.info(
+            'Nuevo registro recibido: ${registro['nombre']} (${registro['rol']})',
+            tag: 'Socket',
+          );
+          // Enviar el registro al controlador para que lo procese
+          _controller.add({'record': registro});
+        }
+        return;
+      case 'connection':
+        // Mensaje de bienvenida del servidor, ignorar
+        AppLogger.debug('Mensaje de conexión recibido', tag: 'Socket');
         return;
       default:
         message.remove('type');

@@ -19,10 +19,14 @@ class DailyTrendPanel extends StatelessWidget {
 
     final values = data.map((e) => e.value).toList(growable: false);
     final labels = data.map((e) => e.hour).toList(growable: false);
-    final maxValue = max(10, (values.reduce(max) * 1.25).round());
+    final maxValueInData = values.isEmpty ? 0 : values.reduce(max);
+    // Si todos los valores son 0, usar un máximo mínimo para mostrar el gráfico
+    final maxValue = maxValueInData == 0 
+        ? 10 
+        : max(10, (maxValueInData * 1.25).round());
     final double average =
         values.isEmpty ? 0.0 : values.reduce((a, b) => a + b) / values.length;
-    final variation = values.last - values.first;
+    final variation = values.isEmpty ? 0 : (values.last - values.first);
 
     return Container(
       decoration: BoxDecoration(

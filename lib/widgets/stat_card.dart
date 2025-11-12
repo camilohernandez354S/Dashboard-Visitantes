@@ -19,8 +19,8 @@ class StatCard extends StatelessWidget {
     this.tooltip,
     Map<String, int>? breakdown,
     List<int>? trend,
-  }) : _breakdown = breakdown ?? const {'Modelo': 5, 'Centro': 4, 'Km 11': 3},
-       _trend = trend ?? const [4, 5, 6, 7, 8, 7, 9];
+  }) : _breakdown = breakdown ?? const <String, int>{},
+       _trend = trend ?? const <int>[];
 
   final String title;
   final int value;
@@ -33,6 +33,10 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Debug: imprimir breakdown recibido
+    // ignore: avoid_print
+    print('🎨 [StatCard] ${title} - Breakdown: $_breakdown (isEmpty: ${_breakdown.isEmpty})');
+    
     final bool isPositive = variation >= 0;
     final bool isNeutral = variation == 0;
     final Color variationColor =
@@ -133,15 +137,15 @@ class StatCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (_trend.isNotEmpty) ...[
+              if (_trend.isNotEmpty && _trend.any((v) => v > 0)) ...[
                 const SizedBox(width: 12),
                 Expanded(
                   child: SizedBox(
                     height: 40,
                     child: LineChart(
                       LineChartData(
-                        minY: _trend.reduce(min).toDouble() - 2,
-                        maxY: _trend.reduce(max).toDouble() + 2,
+                        minY: 0,
+                        maxY: (_trend.reduce(max) * 1.2).clamp(5.0, double.infinity),
                         titlesData: const FlTitlesData(show: false),
                         gridData: const FlGridData(show: false),
                         borderData: FlBorderData(show: false),

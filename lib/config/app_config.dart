@@ -12,11 +12,15 @@ class AppConfig {
   final Uri? wsDashboardUrl;
 
   /// Carga configuración desde variables `--dart-define`.
+  /// Si no se proporcionan, usa valores por defecto para el servidor local.
   factory AppConfig.fromEnvironment() {
-    final String apiBaseRaw = const String.fromEnvironment('API_BASE_URL');
+    final String apiBaseRaw = const String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: 'http://localhost:3000',
+    );
     final String wsBaseRaw = const String.fromEnvironment(
       'WS_URL',
-      defaultValue: '',
+      defaultValue: 'ws://localhost:8080',
     );
 
     Uri? parseUri(String raw) {
@@ -49,8 +53,8 @@ class AppConfig {
   /// Configuración por defecto pensada para entornos locales.
   static AppConfig fallback() {
     return AppConfig._(
-      apiBaseUrl: Uri.parse('http://localhost:8000/api/'),
-      wsDashboardUrl: Uri.parse('ws://localhost:8000/ws/dashboard'),
+      apiBaseUrl: Uri.parse('http://localhost:3000'),
+      wsDashboardUrl: Uri.parse('ws://localhost:8080'),
     );
   }
 }

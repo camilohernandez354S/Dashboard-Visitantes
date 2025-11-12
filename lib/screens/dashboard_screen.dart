@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../providers/dashboard_realtime_controller.dart';
-import '../services/api_service.dart';
+import '../services/api_service.dart' show DashboardData, AttendanceRole;
 import '../services/socket_service.dart';
 import '../theme/admin_theme.dart';
 import '../widgets/daily_trend_panel.dart';
@@ -30,14 +30,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime? _lastRefresh;
   Timer? _clockTimer;
   bool _isFullscreen = false;
+  StreamSubscription<DashboardData>? _realtimeDataSubscription;
 
   @override
   void initState() {
     super.initState();
     _realtimeController = DashboardRealtimeController();
     _startClock();
-    _initializeDashboard();
+    // ═══════════════════════════════════════════════════════════
+    // ORDEN DE INICIALIZACIÓN CRÍTICO:
+    // 1. Primero configurar los streams (para escuchar actualizaciones)
+    // 2. Luego cargar datos iniciales
+    // ═══════════════════════════════════════════════════════════
     _setupRealtimeStreams();
+    _initializeDashboard();
   }
 
   void _startClock() {
@@ -80,8 +86,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _setupRealtimeStreams() {
+    // Iniciar conexión WebSocket
     _realtimeController.startRealtime();
     _socketStatusStream = _realtimeController.socketStatus;
+    
+    // ═══════════════════════════════════════════════════════════
+    // SUSCRIBIRSE AL STREAM DE DATOS EN TIEMPO REAL
+    // ═══════════════════════════════════════════════════════════
+    // Esto permite que la UI se actualice automáticamente
+    // cuando lleguen nuevos registros por WebSocket
+    _realtimeDataSubscription = _realtimeController.stream.listen(
+      (newData) {
+        if (!mounted) return;
+        
+        // ignore: avoid_print
+        print('🔄 Actualización recibida del stream - '
+              'Instructores: ${newData.instructores}, '
+              'Aprendices: ${newData.aprendices}, '
+              'Total registros: ${newData.records.length}');
+        
+        // Actualizar estado cuando lleguen nuevos datos
+        setState(() {
+          final previousCount = _latestData?.records.length ?? 0;
+          final newCount = newData.records.length;
+          
+          _latestData = newData;
+          _lastRefresh = DateTime.now();
+          
+          // Si aún no hay datos iniciales, establecerlos
+          if (_initialData == null) {
+            _initialData = newData;
+          }
+          
+          // Limpiar error si había uno
+          _errorMessage = null;
+          _loading = false;
+          
+          // Log de actualización
+          if (newCount > previousCount) {
+            // ignore: avoid_print
+            print('✅ UI actualizada - Nuevo registro agregado '
+                  '($previousCount → $newCount registros)');
+          }
+        });
+      },
+      onError: (error) {
+        if (!mounted) return;
+        // ignore: avoid_print
+        print('❌ Error en stream de datos en tiempo real: $error');
+        // No establecer error aquí para no bloquear la UI
+        // El error solo se muestra si falla la carga inicial
+      },
+    );
   }
 
   Future<void> _handleManualRefresh() async {
@@ -100,6 +156,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _clockTimer?.cancel();
+    // Cancelar suscripción al stream de datos
+    _realtimeDataSubscription?.cancel();
     _realtimeController.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -170,7 +228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    final baselineData = _latestData ?? _initialData ?? DashboardData.mock();
+    final baselineData = _latestData ?? _initialData ?? DashboardData.fromRecords([]);
 
     final appBar =
         _isFullscreen
@@ -335,8 +393,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.person_3_rounded,
         AdminTheme.primaryBlue,
         data.variationFor('instructores'),
-        const {'Modelo': 12, 'Centro': 9, 'Km 11': 6},
-        const [9, 11, 10, 12, 13, 14, 15],
+        data.getBreakdownBySede(AttendanceRole.instructor),
+        data.getWeeklyTrend(AttendanceRole.instructor),
       ),
       (
         'Aprendiz',
@@ -344,8 +402,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.school_rounded,
         AdminTheme.successGreen,
         data.variationFor('aprendices'),
-        const {'Modelo': 48, 'Centro': 62, 'Km 11': 35},
-        const [120, 125, 130, 140, 150, 145, 155],
+        data.getBreakdownBySede(AttendanceRole.aprendiz),
+        data.getWeeklyTrend(AttendanceRole.aprendiz),
       ),
       (
         'Funcionario',
@@ -353,8 +411,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.badge_rounded,
         AdminTheme.warningAmber,
         data.variationFor('funcionarios'),
-        const {'Modelo': 8, 'Centro': 10, 'Km 11': 5},
-        const [18, 20, 19, 22, 24, 23, 25],
+        data.getBreakdownBySede(AttendanceRole.funcionario),
+        data.getWeeklyTrend(AttendanceRole.funcionario),
       ),
       (
         'Visitante',
@@ -362,8 +420,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.directions_walk_rounded,
         AdminTheme.infoTeal,
         data.variationFor('visitantes'),
-        const {'Modelo': 3, 'Centro': 3, 'Km 11': 2},
-        const [5, 6, 5, 7, 8, 7, 9],
+        data.getBreakdownBySede(AttendanceRole.visitante),
+        data.getWeeklyTrend(AttendanceRole.visitante),
       ),
     ];
 
@@ -407,7 +465,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildExecutiveSummary(DashboardData data) {
     final total = data.weeklyTotal;
     final variation = data.variationFor('aprendices');
-    final sedeCentro = 0.48; // Placeholder mientras llegan datos reales.
+    final sedeDistribution = data.getSedeDistribution();
+
+    String summaryText;
+    if (total == 0) {
+      summaryText = 'Aún no se han registrado asistencias esta semana. '
+          'Los datos se actualizarán en tiempo real cuando se registren visitantes.';
+    } else {
+      final variationText = variation == 0.0
+          ? 'sin variación'
+          : variation > 0
+              ? 'con un crecimiento del ${variation.toStringAsFixed(1)}%'
+              : 'con una disminución del ${variation.abs().toStringAsFixed(1)}%';
+      
+      if (sedeDistribution.isEmpty) {
+        summaryText = 'Esta semana se registraron $total asistencias en total, '
+            '$variationText frente a la semana anterior.';
+      } else {
+        // Obtener la sede con mayor porcentaje
+        final topSede = sedeDistribution.entries.reduce(
+          (a, b) => a.value > b.value ? a : b,
+        );
+        final otherSedes = sedeDistribution.entries
+            .where((e) => e.key != topSede.key)
+            .toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        
+        String sedeText;
+        if (otherSedes.isEmpty) {
+          sedeText = 'Todos los registros pertenecen a la sede ${topSede.key}.';
+        } else if (otherSedes.length == 1) {
+          sedeText = 'La sede ${topSede.key} concentró el ${(topSede.value * 100).toStringAsFixed(0)}% '
+              'de los registros, seguida por ${otherSedes.first.key}.';
+        } else {
+          final secondSede = otherSedes.first.key;
+          sedeText = 'La sede ${topSede.key} concentró el ${(topSede.value * 100).toStringAsFixed(0)}% '
+              'de los registros, seguida por ${secondSede} y otras sedes.';
+        }
+        
+        summaryText = 'Esta semana se registraron $total asistencias en total, '
+            '$variationText frente a la semana anterior. $sedeText';
+      }
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -436,10 +535,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Esta semana se registraron $total asistencias en total, '
-            'con un crecimiento del ${variation.toStringAsFixed(1)} % frente a la semana anterior. '
-            'La sede Centro concentró aproximadamente el ${(sedeCentro * 100).toStringAsFixed(0)} % de los registros, '
-            'seguida por las sedes Modelo y Km 11.',
+            summaryText,
             style: const TextStyle(
               fontSize: 13,
               height: 1.5,

@@ -140,26 +140,28 @@ class DashboardRealtimeController {
 
   void _onSocketPayload(Map<String, dynamic> payload) {
     try {
-      // Log detallado del payload recibido
-      AppLogger.info(
-        '📥 Payload recibido en controlador: $payload',
+      // Filtrar mensajes de protocolo Pusher que no son eventos de aplicación
+      final event = payload['event']?.toString();
+      if (event != null && 
+          (event.startsWith('pusher:') || 
+           event.startsWith('pusher_internal:'))) {
+        // Ignorar mensajes de protocolo Pusher (pong, ping, subscription_succeeded, etc.)
+        // No loguear para evitar spam de logs
+        return;
+      }
+
+      // Log solo en modo debug para eventos de aplicación
+      AppLogger.debug(
+        '📥 Payload recibido: $payload',
         tag: 'Realtime',
       );
 
       // Asegurar que siempre tengamos datos actuales
       // Si no hay datos, cargar desde la API primero
       if (_latest == null || _latest!.records.isEmpty) {
-        AppLogger.info(
-          '⚠️ No hay datos iniciales o están vacíos, cargando desde API...',
-          tag: 'Realtime',
-        );
         // Cargar datos de forma asíncrona pero no esperar
         loadInitialData()
             .then((loadedData) {
-              AppLogger.info(
-                '✅ Datos iniciales cargados: ${loadedData.records.length} registros',
-                tag: 'Realtime',
-              );
               // Procesar el payload nuevamente con los datos cargados
               _onSocketPayload(payload);
             })
@@ -194,8 +196,9 @@ class DashboardRealtimeController {
             return;
           }
 
-          AppLogger.info(
-            '📥 Evento visitante.actualizado: ${record.name} (${record.role.label}) - Tipo: $tipo',
+          // Log solo en debug
+          AppLogger.debug(
+            '📥 Evento visitante.actualizado: ${record.name} (${record.role.label})',
             tag: 'Realtime',
           );
 
@@ -224,18 +227,6 @@ class DashboardRealtimeController {
           final updated = current.applyRecord(record);
           _latest = updated;
 
-          AppLogger.info(
-            '📝 Registro agregado - Total registros: ${updated.records.length} (antes: ${current.records.length})',
-            tag: 'Realtime',
-          );
-
-          AppLogger.info(
-            '📊 Datos actualizados - Instructores: ${updated.instructores}, '
-            'Aprendices: ${updated.aprendices}, Funcionarios: ${updated.funcionarios}, '
-            'Visitantes: ${updated.visitantes}',
-            tag: 'Realtime',
-          );
-
           _streamController.add(updated);
           _statusController.add(SocketStatus.connected);
           _updateResumeToken();
@@ -246,22 +237,11 @@ class DashboardRealtimeController {
       // Manejar evento estadisticas.actualizadas (tiene prioridad)
       if (payload['event'] == 'estadisticas.actualizadas') {
         final data = payload['data'] ?? payload;
-        AppLogger.info(
-          '📊 Evento estadisticas.actualizadas recibido',
-          tag: 'Realtime',
-        );
 
         // Actualizar con las estadísticas recibidas del backend
         // Estas estadísticas tienen prioridad sobre los cálculos locales
         final updated = current.mergeFromSocket(data);
         _latest = updated;
-
-        AppLogger.info(
-          '📊 Estadísticas actualizadas - Instructores: ${updated.instructores}, '
-          'Aprendices: ${updated.aprendices}, Funcionarios: ${updated.funcionarios}, '
-          'Visitantes: ${updated.visitantes}',
-          tag: 'Realtime',
-        );
 
         _streamController.add(updated);
         _statusController.add(SocketStatus.connected);
@@ -274,11 +254,6 @@ class DashboardRealtimeController {
         final registroJson = payload['record'];
         if (registroJson is Map<String, dynamic>) {
           final record = AttendanceRecord.fromServerJson(registroJson);
-
-          AppLogger.info(
-            '📥 Nuevo registro recibido por WebSocket: ${record.name} (${record.role.label})',
-            tag: 'Realtime',
-          );
 
           // Verificar duplicados también para el formato de compatibilidad
           final recordExists = current.records.any((existing) {
@@ -302,14 +277,6 @@ class DashboardRealtimeController {
           final updated = current.applyRecord(record);
           _latest = updated;
 
-          AppLogger.info(
-            '📊 Datos actualizados - Instructores: ${updated.instructores}, '
-            'Aprendices: ${updated.aprendices}, Funcionarios: ${updated.funcionarios}, '
-            'Visitantes: ${updated.visitantes}, '
-            'Total registros: ${updated.records.length}',
-            tag: 'Realtime',
-          );
-
           _streamController.add(updated);
           _statusController.add(SocketStatus.connected);
           _updateResumeToken();
@@ -318,10 +285,6 @@ class DashboardRealtimeController {
       }
 
       // Para otros tipos de payload, intentar procesarlos de diferentes maneras
-      AppLogger.info(
-        '🔄 Procesando payload genérico - Intentando diferentes formatos',
-        tag: 'Realtime',
-      );
 
       // Intentar procesar como estadísticas directas
       if (payload.containsKey('instructores') ||
@@ -361,19 +324,6 @@ class DashboardRealtimeController {
           _streamController.add(updated);
           _statusController.add(SocketStatus.connected);
           _updateResumeToken();
-          AppLogger.info(
-            '✅ Datos actualizados desde payload genérico - '
-            'Instructores: ${updated.instructores}, '
-            'Aprendices: ${updated.aprendices}, '
-            'Funcionarios: ${updated.funcionarios}, '
-            'Visitantes: ${updated.visitantes}',
-            tag: 'Realtime',
-          );
-        } else {
-          AppLogger.debug(
-            '⚠️ Payload procesado pero no hay cambios en los datos',
-            tag: 'Realtime',
-          );
         }
       } catch (e) {
         AppLogger.warn(

@@ -23,7 +23,7 @@ class AppConfig {
   ///
   /// NOTA: Laravel Reverb usa el protocolo Pusher.
   /// - HTTP API: http://localhost (puerto 80)
-  /// - WebSocket Reverb: ws://localhost:8080/app/{REVERB_APP_KEY}
+  /// - WebSocket: ws://localhost:80 (puerto 80)
   /// - REVERB_APP_KEY por defecto: 'local' (debe coincidir con .env del backend)
   factory AppConfig.fromEnvironment() {
     final String apiBaseRaw = const String.fromEnvironment(

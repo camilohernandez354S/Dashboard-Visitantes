@@ -8,10 +8,10 @@ import '../utils/logger.dart';
 enum SocketStatus { idle, connecting, connected, reconnecting, disconnected }
 
 /// Endpoint WebSocket configurable via `--dart-define=WS_URL=...`
-/// Por defecto usa ws://localhost (mismo servidor que HTTP pero con protocolo ws://)
+/// Por defecto usa ws://localhost:8080 (puerto 8080)
 const String defaultSocketUrl = String.fromEnvironment(
   'WS_URL',
-  defaultValue: 'ws://localhost:80',
+  defaultValue: 'ws://localhost:8080',
 );
 
 /// Servicio encargado de gestionar la conexión WebSocket del dashboard.
@@ -38,7 +38,7 @@ class SocketService {
   /// Normaliza la URL de WebSocket, convirtiendo http:// a ws:// y https:// a wss://
   static String _normalizeWebSocketUrl(String url) {
     if (url.isEmpty) {
-      return 'ws://localhost';
+      return 'ws://localhost:8080';
     }
 
     String normalized = url.trim();
@@ -138,6 +138,7 @@ class SocketService {
         '🔌 Intentando conectar al WebSocket: $uri',
         tag: 'Socket',
       );
+
       _channel = WebSocketChannel.connect(uri);
       AppLogger.info('✅ Canal WebSocket creado', tag: 'Socket');
 
@@ -151,12 +152,37 @@ class SocketService {
       // Resetear flag de suscripción al reconectar
       _isSubscribed = false;
 
-      _statusController.add(SocketStatus.connected);
+      // Solo intentar suscribirse si la URL tiene el path /app/ (Laravel Reverb)
+      // Para servidores simples (Node.js), no es necesario suscribirse
+      if (uri.path.startsWith('/app/')) {
+        // Es Laravel Reverb, esperar confirmación de conexión o timeout
+        AppLogger.info(
+          '✅ WebSocket conectado, esperando confirmación de Pusher...',
+          tag: 'Socket',
+        );
+        _statusController.add(SocketStatus.connected);
+
+        // Intentar suscribirse después de un breve delay si no se recibe connection_established
+        Timer(const Duration(milliseconds: 1000), () {
+          if (_channel != null && !_isSubscribed) {
+            AppLogger.info(
+              '⏱️ No se recibió pusher:connection_established, intentando suscribirse de todas formas...',
+              tag: 'Socket',
+            );
+            _subscribeToChannels();
+          }
+        });
+      } else {
+        // Servidor simple (Node.js), no necesita suscripción
+        AppLogger.info(
+          '✅ Servidor WebSocket simple detectado, no requiere suscripción a canales',
+          tag: 'Socket',
+        );
+        _isSubscribed = true; // Marcar como "suscrito" para evitar reintentos
+        _statusController.add(SocketStatus.connected);
+      }
+
       _startPing();
-      AppLogger.info(
-        '✅ WebSocket conectado, esperando confirmación de Pusher...',
-        tag: 'Socket',
-      );
     } catch (error) {
       AppLogger.error(
         '❌ Error al conectar WebSocket: $error',
@@ -192,32 +218,40 @@ class SocketService {
       );
     }
 
-    // Laravel Reverb usa el formato: ws://host:port/app/{REVERB_APP_KEY}
-    // Construir la URL completa con el path /app/{key}
-    Uri finalUri = base;
-    final path = '/app/$_reverbAppKey';
-
-    // Si la URL base no tiene el path correcto, agregarlo
-    if (base.path.isEmpty ||
-        base.path == '/' ||
-        !base.path.startsWith('/app/')) {
-      finalUri = base.replace(path: path);
-      AppLogger.debug('🔗 Agregando path de Reverb: $path', tag: 'Socket');
+    // Si la URL ya tiene un path (como /app/local), usarla tal cual
+    // Esto permite soportar tanto Laravel Reverb como servidores WebSocket simples
+    if (base.path.isNotEmpty && base.path != '/') {
+      AppLogger.info(
+        '🔗 URL ya tiene path: ${base.path}, usando tal cual',
+        tag: 'Socket',
+      );
+      return base;
     }
 
-    final result = finalUri;
-    AppLogger.info(
-      '🔗 URI WebSocket construida: $result (URL base normalizada: $normalizedUrl)',
-      tag: 'Socket',
-    );
-    return result;
+    // Si no tiene path y tenemos una clave de aplicación, agregar path de Reverb
+    // Laravel Reverb siempre requiere el path /app/{appKey}, incluso si es 'local'
+    // Solo omitir el path si explícitamente se indica que es un servidor simple
+    if (_reverbAppKey.isNotEmpty && base.path.isEmpty) {
+      final path = '/app/$_reverbAppKey';
+      final finalUri = base.replace(path: path);
+      AppLogger.info(
+        '🔗 Agregando path de Reverb: $path (clave: $_reverbAppKey)',
+        tag: 'Socket',
+      );
+      AppLogger.info('🔗 URI WebSocket construida: $finalUri', tag: 'Socket');
+      return finalUri;
+    }
+
+    // Si ya tiene path o no hay clave de app, usar la URL tal cual
+    AppLogger.info('🔗 Usando URI sin modificar: $base', tag: 'Socket');
+    return base;
   }
 
   void _handleMessage(dynamic event) {
     try {
       final dynamic decoded = event is String ? jsonDecode(event) : event;
 
-      // Log del mensaje raw recibido para debugging
+      // Log del mensaje raw recibido para debugging (solo en debug mode)
       AppLogger.debug('📨 Mensaje WebSocket recibido: $decoded', tag: 'Socket');
 
       if (decoded is Map) {
@@ -239,7 +273,11 @@ class SocketService {
 
   /// Suscribe a los canales usando el protocolo Pusher
   void _subscribeToChannels() {
-    if (_channel == null || _isSubscribed) {
+    if (_channel == null) {
+      AppLogger.warn(
+        '⚠️ No hay canal WebSocket disponible para suscribirse',
+        tag: 'Socket',
+      );
       return;
     }
 
@@ -249,16 +287,23 @@ class SocketService {
     );
 
     for (final channel in _channels) {
+      // Laravel Reverb usa el formato estándar de Pusher
       final subscribeMessage = {
         'event': 'pusher:subscribe',
         'data': {'channel': channel},
       };
       _sendMessage(subscribeMessage);
-      AppLogger.debug(
+      AppLogger.info(
         '📤 Enviado pusher:subscribe para canal: $channel',
         tag: 'Socket',
       );
     }
+
+    // No marcar como suscrito todavía, esperar confirmación
+    AppLogger.info(
+      '⏳ Esperando confirmación de suscripción a canales...',
+      tag: 'Socket',
+    );
   }
 
   void _processStructuredMessage(Map<String, dynamic> message) {
@@ -275,7 +320,12 @@ class SocketService {
     AppLogger.debug('📋 Contenido completo: $message', tag: 'Socket');
 
     // Manejar eventos del protocolo Pusher
-    if (event == 'pusher:connection_established') {
+    // Pusher puede enviar connection_established como evento o como tipo
+    if (event == 'pusher:connection_established' ||
+        type == 'pusher:connection_established' ||
+        (message.containsKey('data') &&
+            message['data'] is Map &&
+            (message['data'] as Map).containsKey('socket_id'))) {
       AppLogger.info(
         '✅ Conexión Pusher establecida: ${message['data']}',
         tag: 'Socket',
@@ -285,18 +335,82 @@ class SocketService {
       return;
     }
 
-    if (event == 'pusher_internal:subscription_succeeded') {
+    if (event == 'pusher_internal:subscription_succeeded' ||
+        event == 'pusher:subscription_succeeded' ||
+        type == 'pusher_internal:subscription_succeeded') {
       final channelName = message['channel']?.toString() ?? 'desconocido';
       AppLogger.info(
         '✅ Suscripción exitosa al canal: $channelName',
         tag: 'Socket',
       );
+      // Marcar como suscrito solo si todos los canales están suscritos
+      // Por ahora, marcamos como suscrito cuando recibamos al menos una confirmación
       _isSubscribed = true;
+      _statusController.add(SocketStatus.connected);
       return;
     }
 
     if (event == 'pusher:error') {
-      AppLogger.error('❌ Error de Pusher: ${message['data']}', tag: 'Socket');
+      final errorData = message['data'];
+      final errorCode = errorData is Map ? errorData['code'] : null;
+      final errorMessage =
+          errorData is Map
+              ? errorData['message']
+              : errorData?.toString() ?? 'Error desconocido';
+
+      AppLogger.error(
+        '❌ Error de Pusher: $errorMessage (Código: $errorCode)',
+        tag: 'Socket',
+      );
+
+      // Manejar error de formato de mensaje inválido
+      if (errorCode == 4200 ||
+          errorMessage.toString().contains('Invalid message format')) {
+        AppLogger.warn(
+          '⚠️ Formato de mensaje inválido detectado. Esto puede ser por mensajes ping/pong incorrectos.',
+          tag: 'Socket',
+        );
+        // No cerrar la conexión, solo loguear el warning
+        return;
+      }
+
+      // Manejar error específico de aplicación no existente
+      if (errorCode == 4001 ||
+          errorMessage.toString().contains('Application does not exist')) {
+        _lastErrorWasAppNotFound = true;
+        AppLogger.error(
+          '❌ La aplicación con clave "$_reverbAppKey" no existe en el servidor Reverb',
+          tag: 'Socket',
+        );
+        AppLogger.error(
+          '🔴 ERROR DE CONFIGURACIÓN: El servidor Reverb no reconoce la aplicación.\n'
+          '   Esto indica un problema de configuración en el backend Laravel.\n\n'
+          '📋 PASOS PARA SOLUCIONAR:\n'
+          '   1. Abre el archivo .env de tu backend Laravel\n'
+          '   2. Asegúrate de que estas variables estén definidas (NO como "..."):\n'
+          '      REVERB_APP_ID=$_reverbAppKey\n'
+          '      REVERB_APP_KEY=$_reverbAppKey\n'
+          '      REVERB_APP_SECRET=$_reverbAppKey\n'
+          '      REVERB_HOST=0.0.0.0\n'
+          '      REVERB_SERVER_PORT=8080\n'
+          '      BROADCAST_DRIVER=reverb\n\n'
+          '   3. Si usas Docker, verifica que el puerto 8080 esté mapeado\n'
+          '   4. Detén el servidor Reverb actual (Ctrl+C)\n'
+          '   5. Reinicia el servidor: php artisan reverb:start\n'
+          '   6. Verifica que no haya errores al iniciar\n\n'
+          '   Si la clave es diferente a "local", configura Flutter con:\n'
+          '   --dart-define=REVERB_APP_KEY=tu_clave_real',
+          tag: 'Socket',
+        );
+        // Cerrar la conexión y NO reintentar hasta que se corrija la configuración
+        _closeSocket();
+        _statusController.add(SocketStatus.disconnected);
+        // Aumentar significativamente el delay antes de reintentar
+        // para evitar spam de logs cuando hay un error de configuración
+        _scheduleReconnectWithDelay(const Duration(seconds: 30));
+        return;
+      }
+
       return;
     }
 
@@ -306,21 +420,60 @@ class SocketService {
 
     // Manejar eventos de los canales visitantes y estadisticas-visitantes
     // También manejar eventos sin canal específico si tienen el evento correcto
+    // Laravel Reverb puede enviar eventos con diferentes formatos
     if (channel == 'visitantes' ||
         channel == 'estadisticas-visitantes' ||
+        channel == 'entrada-salida' ||
         event == 'visitante.actualizado' ||
-        event == 'estadisticas.actualizadas') {
-      if (event == 'visitante.actualizado') {
-        final data = message['data'] ?? message;
+        event == 'estadisticas.actualizadas' ||
+        event == 'AsistenciaRegistrada' ||
+        event == 'asistencia.registrada' ||
+        event == 'EntradaSalidaRegistrada' ||
+        event == 'entrada-salida.registrada') {
+      if (event == 'visitante.actualizado' ||
+          event == 'AsistenciaRegistrada' ||
+          event == 'asistencia.registrada' ||
+          event == 'EntradaSalidaRegistrada' ||
+          event == 'entrada-salida.registrada') {
+        // Extraer datos del evento - puede venir en diferentes formatos
+        dynamic data = message['data'];
+        if (data is String) {
+          try {
+            data = jsonDecode(data);
+          } catch (e) {
+            AppLogger.warn(
+              '⚠️ No se pudo parsear data como JSON: $e',
+              tag: 'Socket',
+            );
+            data = message;
+          }
+        } else if (data == null) {
+          data = message;
+        }
+
         AppLogger.info(
-          '✅ Evento visitante.actualizado recibido - Data: $data',
+          '✅ Evento de asistencia recibido ($event) - Data: $data',
           tag: 'Socket',
         );
         // El evento contiene información de entrada/salida
         _controller.add({'event': 'visitante.actualizado', 'data': data});
         return;
       } else if (event == 'estadisticas.actualizadas') {
-        final data = message['data'] ?? message;
+        dynamic data = message['data'];
+        if (data is String) {
+          try {
+            data = jsonDecode(data);
+          } catch (e) {
+            AppLogger.warn(
+              '⚠️ No se pudo parsear data como JSON: $e',
+              tag: 'Socket',
+            );
+            data = message;
+          }
+        } else if (data == null) {
+          data = message;
+        }
+
         AppLogger.info(
           '✅ Evento estadisticas.actualizadas recibido - Data: $data',
           tag: 'Socket',
@@ -334,7 +487,8 @@ class SocketService {
     switch (type) {
       case 'heartbeat':
         AppLogger.debug('Heartbeat recibido', tag: 'Socket');
-        _sendMessage({'type': 'pong'});
+        // Pusher usa el formato de evento para pong
+        _sendMessage({'event': 'pusher:pong', 'data': {}});
         return;
       case 'pong':
         return;
@@ -460,10 +614,70 @@ class SocketService {
 
   void _handleError(Object error) {
     AppLogger.error('❌ Error en socket: $error', tag: 'Socket', err: error);
+
+    // Obtener la URI que se intentó usar
+    Uri? attemptedUri;
+    try {
+      attemptedUri = _buildUri();
+    } catch (e) {
+      AppLogger.error('❌ Error al construir URI: $e', tag: 'Socket', err: e);
+    }
+
     AppLogger.error(
-      '📋 Detalles del error - Tipo: ${error.runtimeType}, URL: $_url',
+      '📋 Detalles del error:\n'
+      '   - Tipo: ${error.runtimeType}\n'
+      '   - URL base: $_url\n'
+      '   - URI intentada: ${attemptedUri ?? "N/A"}\n'
+      '   - REVERB_APP_KEY: $_reverbAppKey',
       tag: 'Socket',
     );
+
+    // Si el error es de conexión, puede ser que el puerto esté mal
+    final errorStr = error.toString().toLowerCase();
+    if (errorStr.contains('connection refused') ||
+        errorStr.contains('failed to connect') ||
+        errorStr.contains('network is unreachable') ||
+        errorStr.contains('connection closed') ||
+        errorStr.contains('websocket')) {
+      AppLogger.warn(
+        '⚠️ Error de conexión detectado. Verifica que el servidor WebSocket esté corriendo.',
+        tag: 'Socket',
+      );
+
+      // Determinar qué tipo de servidor se espera según la URL
+      if (attemptedUri != null) {
+        final isReverbServer =
+            attemptedUri.path.startsWith('/app/') || _reverbAppKey.isNotEmpty;
+
+        if (isReverbServer) {
+          final port = attemptedUri.port;
+          AppLogger.info(
+            '💡 Laravel Reverb detectado. Verifica:\n'
+            '   1. Que Reverb esté corriendo: php artisan reverb:start\n'
+            '   2. Que REVERB_SERVER_PORT=$port en tu .env (o el puerto que uses)\n'
+            '   3. Que REVERB_APP_KEY=$_reverbAppKey coincida con tu .env\n'
+            '   4. Que la URL sea accesible: $attemptedUri\n'
+            '   5. Si usas Docker, asegúrate de mapear el puerto $port correctamente\n'
+            '   6. Verifica que Reverb esté escuchando en el puerto correcto',
+            tag: 'Socket',
+          );
+        } else {
+          AppLogger.info(
+            '💡 Servidor WebSocket simple detectado. Verifica:\n'
+            '   1. Que el servidor esté corriendo\n'
+            '   2. Que esté escuchando en: $attemptedUri\n'
+            '   3. Que el puerto esté correctamente configurado',
+            tag: 'Socket',
+          );
+        }
+      } else {
+        AppLogger.info(
+          '💡 No se pudo construir la URI. Verifica la configuración de WS_URL.',
+          tag: 'Socket',
+        );
+      }
+    }
+
     _closeSocket();
     if (_manuallyClosed) {
       return;
@@ -477,12 +691,29 @@ class SocketService {
       return;
     }
 
-    _reconnectTimer = Timer(const Duration(seconds: 5), () {
+    // Si hay un error de aplicación no existente, aumentar el delay para evitar spam
+    final delay =
+        _lastErrorWasAppNotFound
+            ? const Duration(seconds: 15)
+            : const Duration(seconds: 5);
+
+    _scheduleReconnectWithDelay(delay);
+  }
+
+  void _scheduleReconnectWithDelay(Duration delay) {
+    if (_reconnectTimer != null && _reconnectTimer!.isActive) {
+      return;
+    }
+
+    _reconnectTimer = Timer(delay, () {
       if (_manuallyClosed) return;
+      _lastErrorWasAppNotFound = false; // Resetear flag
       AppLogger.info('Intentando reconectar...', tag: 'Socket');
       _openConnection();
     });
   }
+
+  bool _lastErrorWasAppNotFound = false;
 
   void _cancelTimers() {
     _reconnectTimer?.cancel();
@@ -501,7 +732,8 @@ class SocketService {
   void _startPing() {
     _pingTimer?.cancel();
     _pingTimer = Timer.periodic(_pingInterval, (_) {
-      _sendMessage({'type': 'ping'});
+      // Pusher usa el formato de evento para ping
+      _sendMessage({'event': 'pusher:ping', 'data': {}});
     });
   }
 

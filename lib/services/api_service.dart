@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 /// URL base de la API configurada via --dart-define
 const String apiBase = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://localhost:8080',
+  defaultValue: 'http://localhost',
 );
 
 class ApiService {
@@ -20,22 +20,13 @@ class ApiService {
       final uri = Uri.parse(
         '$apiBase/api/websocket/entrada-salida/estadisticas',
       );
-      // ignore: avoid_print
-      print('🌐 [ApiService] Consultando estadísticas: $uri');
 
       final resp = await http
           .get(uri, headers: {'Accept': 'application/json'})
           .timeout(const Duration(seconds: 6));
 
       if (resp.statusCode == 200) {
-        // ignore: avoid_print
-        print('✅ [ApiService] Respuesta exitosa (${resp.statusCode})');
-        // ignore: avoid_print
-        print('📄 [ApiService] Body recibido: ${resp.body}');
-
         final dynamic decoded = jsonDecode(resp.body);
-        // ignore: avoid_print
-        print('🔍 [ApiService] JSON decodificado: $decoded');
 
         List<AttendanceRecord> allRecords = [];
 
@@ -47,10 +38,6 @@ class ApiService {
               decoded['personas'] ??
               decoded['asistencias'];
           if (registrosList is List && registrosList.isNotEmpty) {
-            // ignore: avoid_print
-            print(
-              '📋 [ApiService] Formato detectado: Lista de registros en estadísticas (${registrosList.length} items)',
-            );
             allRecords =
                 registrosList
                     .whereType<Map<String, dynamic>>()
@@ -74,68 +61,50 @@ class ApiService {
         // Si no se obtuvieron registros del endpoint de estadísticas,
         // intentar obtenerlos del endpoint de personas-dentro
         if (allRecords.isEmpty) {
-          // ignore: avoid_print
-          print(
-            '⚠️ [ApiService] No se encontraron registros en estadísticas, consultando personas-dentro...',
-          );
           try {
             final personasDentro = await fetchPersonasDentro();
-            // ignore: avoid_print
-            print(
-              '📋 [ApiService] Personas dentro obtenidas: ${personasDentro.length}',
-            );
-
             allRecords =
                 personasDentro
                     .map((json) {
                       try {
-                        return AttendanceRecord.fromServerJson(json);
+                        // Intentar primero con fromServerJson (formato Laravel)
+                        // Si falla, intentar con fromJson (formato genérico)
+                        try {
+                          // Verificar si tiene los campos necesarios para fromServerJson
+                          final hasRol =
+                              json.containsKey('rol') ||
+                              json.containsKey('tipo_persona');
+                          final hasHora =
+                              json.containsKey('hora') ||
+                              json.containsKey('hora_entrada') ||
+                              json.containsKey('timestamp_entrada');
+
+                          if (hasRol && hasHora) {
+                            return AttendanceRecord.fromServerJson(json);
+                          } else {
+                            return AttendanceRecord.fromJson(json);
+                          }
+                        } catch (e) {
+                          // Si fromServerJson falla, intentar con fromJson
+                          return AttendanceRecord.fromJson(json);
+                        }
                       } catch (e) {
-                        // ignore: avoid_print
-                        print(
-                          '⚠️ [ApiService] Error al parsear persona: $e - JSON: $json',
-                        );
                         return null;
                       }
                     })
                     .whereType<AttendanceRecord>()
                     .where((record) => record.role.isTracked)
                     .toList();
-
-            // ignore: avoid_print
-            print(
-              '✅ [ApiService] ${allRecords.length} registros válidos obtenidos de personas-dentro',
-            );
           } catch (e) {
+            // Solo loguear errores críticos
             // ignore: avoid_print
-            print('⚠️ [ApiService] Error al obtener personas-dentro: $e');
+            print('❌ [ApiService] Error al obtener personas-dentro: $e');
           }
         }
 
         // Si tenemos registros, crear DashboardData desde ellos
         if (allRecords.isNotEmpty) {
-          // ignore: avoid_print
-          print(
-            '📊 [ApiService] ${allRecords.length} registros obtenidos después de filtrar',
-          );
-
-          for (final record in allRecords) {
-            // ignore: avoid_print
-            print(
-              '  ✓ Registro: ${record.name} (${record.role.label}) - Sede: ${record.sede ?? "null"}',
-            );
-          }
-
           final data = DashboardData.fromRecords(allRecords);
-          // ignore: avoid_print
-          print(
-            '✅ [ApiService] DashboardData creado desde registros almacenados - '
-            'Instructores: ${data.instructores}, '
-            'Aprendices: ${data.aprendices}, '
-            'Funcionarios: ${data.funcionarios}, '
-            'Visitantes: ${data.visitantes}, '
-            'Total registros: ${data.records.length}',
-          );
           return data;
         }
 
@@ -145,46 +114,20 @@ class ApiService {
                 decoded.containsKey('aprendices') ||
                 decoded.containsKey('funcionarios') ||
                 decoded.containsKey('visitantes'))) {
-          // ignore: avoid_print
-          print(
-            '📊 [ApiService] Formato detectado: Solo estadísticas (sin registros)',
-          );
           final data = DashboardData.fromJson(decoded);
-          // ignore: avoid_print
-          print(
-            '✅ [ApiService] DashboardData creado desde estadísticas - '
-            'Instructores: ${data.instructores}, '
-            'Aprendices: ${data.aprendices}, '
-            'Funcionarios: ${data.funcionarios}, '
-            'Visitantes: ${data.visitantes}',
-          );
-          // ignore: avoid_print
-          print(
-            '⚠️ [ApiService] No se pudieron cargar los registros almacenados, solo estadísticas',
-          );
           return data;
         }
 
         // Si no hay nada, retornar datos vacíos
-        // ignore: avoid_print
-        print(
-          '⚠️ [ApiService] No se encontraron registros ni estadísticas válidas',
-        );
         return DashboardData.fromRecords([]);
       } else {
-        // ignore: avoid_print
-        print('❌ [ApiService] HTTP ${resp.statusCode}: ${resp.body}');
         throw Exception('Error HTTP ${resp.statusCode}');
       }
-    } on TimeoutException catch (e) {
-      // ignore: avoid_print
-      print('⏱️ [ApiService] Timeout: $e');
+    } on TimeoutException {
       rethrow;
-    } catch (e, s) {
+    } catch (e) {
       // ignore: avoid_print
       print('❌ [ApiService] Error inesperado: $e');
-      // ignore: avoid_print
-      print(s);
       rethrow;
     }
   }
@@ -195,8 +138,6 @@ class ApiService {
       final uri = Uri.parse(
         '$apiBase/api/websocket/entrada-salida/personas-dentro',
       );
-      // ignore: avoid_print
-      print('🌐 [ApiService] Consultando personas dentro: $uri');
 
       final resp = await http
           .get(uri, headers: {'Accept': 'application/json'})
@@ -204,19 +145,26 @@ class ApiService {
 
       if (resp.statusCode == 200) {
         final dynamic decoded = jsonDecode(resp.body);
+
         if (decoded is List) {
           return decoded.whereType<Map<String, dynamic>>().toList();
-        } else if (decoded is Map<String, dynamic> &&
-            decoded.containsKey('data')) {
-          final data = decoded['data'];
-          if (data is List) {
-            return data.whereType<Map<String, dynamic>>().toList();
+        } else if (decoded is Map<String, dynamic>) {
+          if (decoded.containsKey('data')) {
+            final data = decoded['data'];
+            if (data is List) {
+              return data.whereType<Map<String, dynamic>>().toList();
+            } else if (data is Map) {
+              // Error: el endpoint está retornando estadísticas en lugar de personas
+              // ignore: avoid_print
+              print(
+                '❌ [ApiService] ERROR: El endpoint /personas-dentro está retornando estadísticas (Map) en lugar de una lista de personas. Verifica la ruta en el backend.',
+              );
+              return [];
+            }
           }
         }
         return [];
       } else {
-        // ignore: avoid_print
-        print('❌ [ApiService] HTTP ${resp.statusCode}: ${resp.body}');
         throw Exception('Error HTTP ${resp.statusCode}');
       }
     } catch (e) {
@@ -912,21 +860,60 @@ class AttendanceRecord {
     );
   }
 
-  /// Parsea un registro del servidor Node.js.
-  /// Formato: { "id": number, "nombre": string, "rol": string, "hora": "HH:MM:SS AM/PM", "sede": string? }
+  /// Parsea un registro del servidor Node.js o Laravel.
+  /// Formatos soportados:
+  /// - { "id": number, "nombre": string, "rol": string, "hora": "HH:MM:SS AM/PM", "sede": string? }
+  /// - { "persona_id": number, "numero_documento": string, "rol": string, "hora_entrada": "HH:MM:SS", "sede": string? }
+  /// - { "persona_id": number, "numero_documento": string, "rol": string, "timestamp_entrada": "ISO8601", "sede": string? }
   factory AttendanceRecord.fromServerJson(Map<String, dynamic> json) {
-    final role = parseAttendanceRole(json['rol']);
-    final rawName = (json['nombre'] ?? '').toString().trim();
-    final horaStr = (json['hora'] ?? '').toString().trim();
+    final role = parseAttendanceRole(json['rol'] ?? json['tipo_persona']);
+    final rawName =
+        (json['nombre'] ??
+                json['nombre_completo'] ??
+                json['numero_documento'] ??
+                '')
+            .toString()
+            .trim();
 
-    // Parsear sede - puede ser null o string
-    // El servidor puede enviar sede como string, null, o no enviar el campo
+    // Intentar obtener la hora de diferentes campos
+    String horaStr = '';
+    if (json.containsKey('hora')) {
+      horaStr = (json['hora'] ?? '').toString().trim();
+    } else if (json.containsKey('hora_entrada')) {
+      horaStr = (json['hora_entrada'] ?? '').toString().trim();
+    } else if (json.containsKey('timestamp_entrada')) {
+      // Si es timestamp, parsearlo directamente
+      final timestamp = json['timestamp_entrada'];
+      if (timestamp != null) {
+        final dt = _parseDateTime(timestamp);
+        if (dt != null) {
+          return AttendanceRecord(
+            role: role,
+            name: rawName.isNotEmpty ? rawName : role.label,
+            recordedAt: dt,
+            sede: json['sede']?.toString(),
+          );
+        }
+      }
+    }
+
+    // Parsear sede - puede ser null, string, o objeto anidado
+    // El servidor puede enviar sede como string, null, objeto {sede: "nombre"}, o no enviar el campo
     String? sede;
     if (json.containsKey('sede')) {
       final sedeValue = json['sede'];
       if (sedeValue != null) {
-        final sedeRaw = sedeValue.toString().trim();
-        sede = sedeRaw.isNotEmpty ? sedeRaw : null;
+        if (sedeValue is Map) {
+          // Si es un objeto, intentar obtener el campo 'sede' o 'nombre'
+          sede =
+              (sedeValue['sede'] ?? sedeValue['nombre'] ?? '')
+                  .toString()
+                  .trim();
+          sede = sede.isNotEmpty ? sede : null;
+        } else {
+          final sedeRaw = sedeValue.toString().trim();
+          sede = sedeRaw.isNotEmpty ? sedeRaw : null;
+        }
       } else {
         sede = null;
       }
@@ -934,18 +921,7 @@ class AttendanceRecord {
       sede = null;
     }
 
-    // Debug: imprimir sede para verificar
-    if (sede != null) {
-      // ignore: avoid_print
-      print(
-        '✅ [AttendanceRecord] Sede parseada: "$sede" para registro: ${json['nombre']} (${json['rol']})',
-      );
-    } else {
-      // ignore: avoid_print
-      print(
-        '⚠️ [AttendanceRecord] Sede es null para registro: ${json['nombre']} (${json['rol']}) - JSON contiene sede: ${json.containsKey('sede')}, valor: ${json['sede']}',
-      );
-    }
+    // Sede parseada (sin logs para evitar spam)
 
     // Convertir hora del servidor (formato "HH:MM:SS AM/PM") a DateTime
     final recordedAt = _parseServerHora(horaStr) ?? DateTime.now();

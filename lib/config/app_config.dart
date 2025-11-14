@@ -28,11 +28,11 @@ class AppConfig {
   factory AppConfig.fromEnvironment() {
     final String apiBaseRaw = const String.fromEnvironment(
       'API_BASE_URL',
-      defaultValue: 'http://localhost',
+      defaultValue: 'http://10.139.237.174:8000',
     );
     final String wsBaseRaw = const String.fromEnvironment(
       'WS_URL',
-      defaultValue: 'ws://localhost:8080',
+      defaultValue: 'ws://10.139.237.174:8080',
     );
     final String reverbAppKey = const String.fromEnvironment(
       'REVERB_APP_KEY',
@@ -71,8 +71,8 @@ class AppConfig {
   /// HTTP y WebSocket usan el mismo servidor pero diferentes protocolos.
   static AppConfig fallback() {
     return AppConfig._(
-      apiBaseUrl: Uri.parse('http://localhost'),
-      wsDashboardUrl: Uri.parse('ws://localhost:8080'),
+      apiBaseUrl: Uri.parse('http://10.139.237.174:8000'),
+      wsDashboardUrl: Uri.parse('ws://10.139.237.174:8080'),
       reverbAppKey: 'local',
     );
   }

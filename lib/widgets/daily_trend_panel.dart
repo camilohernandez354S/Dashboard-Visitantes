@@ -46,70 +46,76 @@ class DailyTrendPanel extends StatelessWidget {
         ],
       ),
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            runSpacing: 12,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '📅 Evolución diaria de asistencias',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: AdminTheme.textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Seguimiento por hora de la jornada actual',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AdminTheme.textMuted,
-                    ),
-                  ),
-                ],
-              ),
               Wrap(
-                spacing: 10,
-                runSpacing: 10,
+                alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 12,
                 children: [
-                  _StatusBadge(
-                    icon: Icons.trending_up_rounded,
-                    label: 'Promedio por hora: ${average.toStringAsFixed(0)}',
-                    background: const Color(0xFFFEF3C7),
-                    foreground: const Color(0xFFE09A00),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '📅 Evolución diaria de asistencias',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AdminTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Seguimiento por hora de la jornada actual',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AdminTheme.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
-                  _StatusBadge(
-                    icon:
-                        variation >= 0
-                            ? Icons.arrow_upward_rounded
-                            : Icons.arrow_downward_rounded,
-                    label:
-                        '${variation >= 0 ? 'Sube' : 'Baja'} ${variation.abs()} desde ${labels.first}',
-                    background:
-                        variation >= 0
-                            ? const Color(0xFFE6F7EF)
-                            : const Color(0xFFFFEBEB),
-                    foreground:
-                        variation >= 0
-                            ? const Color(0xFF009739)
-                            : const Color(0xFFD64545),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _StatusBadge(
+                        icon: Icons.trending_up_rounded,
+                        label: 'Promedio por hora: ${average.toStringAsFixed(0)}',
+                        background: const Color(0xFFFEF3C7),
+                        foreground: const Color(0xFFE09A00),
+                      ),
+                      _StatusBadge(
+                        icon:
+                            variation >= 0
+                                ? Icons.arrow_upward_rounded
+                                : Icons.arrow_downward_rounded,
+                        label:
+                            '${variation >= 0 ? 'Sube' : 'Baja'} ${variation.abs()} desde ${labels.first}',
+                        background:
+                            variation >= 0
+                                ? const Color(0xFFE6F7EF)
+                                : const Color(0xFFFFEBEB),
+                        foreground:
+                            variation >= 0
+                                ? const Color(0xFF009739)
+                                : const Color(0xFFD64545),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
+              const SizedBox(height: 20),
+              SizedBox(
+                height: constraints.maxHeight > 0 
+                    ? constraints.maxHeight - 120 // Restar espacio del header y padding
+                    : 300, // Altura mínima si no hay restricciones
+                child: LayoutBuilder(
+                  builder: (context, chartConstraints) {
                 return Stack(
                   children: [
                     LineChart(
@@ -245,9 +251,9 @@ class DailyTrendPanel extends StatelessWidget {
                     ),
                     Positioned.fill(
                       child: LayoutBuilder(
-                        builder: (context, chartConstraints) {
-                          final width = chartConstraints.maxWidth;
-                          final height = chartConstraints.maxHeight;
+                        builder: (context, innerConstraints) {
+                          final width = innerConstraints.maxWidth;
+                          final height = innerConstraints.maxHeight;
 
                           return Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -279,7 +285,9 @@ class DailyTrendPanel extends StatelessWidget {
               },
             ),
           ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

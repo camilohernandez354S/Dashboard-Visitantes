@@ -19,8 +19,7 @@ class DashboardRealtimeController {
              url:
                  (config ?? AppConfig.fromEnvironment()).wsDashboardUrl
                      ?.toString(),
-             reverbAppKey:
-                 (config ?? AppConfig.fromEnvironment()).reverbAppKey,
+             reverbAppKey: (config ?? AppConfig.fromEnvironment()).reverbAppKey,
              channels: const ['visitantes', 'estadisticas-visitantes'],
            ) {
     _statusSubscription = _socketService.statusStream.listen((status) {
@@ -71,7 +70,8 @@ class DashboardRealtimeController {
         'Aprendices: ${data.aprendices}, '
         'Funcionarios: ${data.funcionarios}, '
         'Visitantes: ${data.visitantes}, '
-        'Total registros: ${data.records.length}',
+        'Asistencias hoy: ${data.asistenciasHoy}, '
+        'Personas dentro total: ${data.personasDentroData?['total'] ?? 0}',
         tag: 'Realtime',
       );
 
@@ -142,23 +142,20 @@ class DashboardRealtimeController {
     try {
       // Filtrar mensajes de protocolo Pusher que no son eventos de aplicación
       final event = payload['event']?.toString();
-      if (event != null && 
-          (event.startsWith('pusher:') || 
-           event.startsWith('pusher_internal:'))) {
+      if (event != null &&
+          (event.startsWith('pusher:') ||
+              event.startsWith('pusher_internal:'))) {
         // Ignorar mensajes de protocolo Pusher (pong, ping, subscription_succeeded, etc.)
         // No loguear para evitar spam de logs
         return;
       }
 
       // Log solo en modo debug para eventos de aplicación
-      AppLogger.debug(
-        '📥 Payload recibido: $payload',
-        tag: 'Realtime',
-      );
+      AppLogger.debug('📥 Payload recibido: $payload', tag: 'Realtime');
 
       // Asegurar que siempre tengamos datos actuales
       // Si no hay datos, cargar desde la API primero
-      if (_latest == null || _latest!.records.isEmpty) {
+      if (_latest == null) {
         // Cargar datos de forma asíncrona pero no esperar
         loadInitialData()
             .then((loadedData) {
@@ -175,164 +172,95 @@ class DashboardRealtimeController {
         return;
       }
 
-      final current = _latest!;
+      // Manejar evento estadisticas.actualizadas (tiene máxima prioridad)
+      // Cuando llegan estadísticas actualizadas, recargar desde el endpoint
+      if (payload['event'] == 'estadisticas.actualizadas') {
+        AppLogger.info(
+          '📊 Evento estadisticas.actualizadas recibido, recargando desde endpoint',
+          tag: 'Realtime',
+        );
+        // Recargar datos desde el endpoint en lugar de usar mergeFromSocket
+        loadInitialData()
+            .then((updated) {
+              _latest = updated;
+              _streamController.add(updated);
+              _statusController.add(SocketStatus.connected);
+              _updateResumeToken();
+            })
+            .catchError((e) {
+              AppLogger.error(
+                'Error al recargar estadísticas desde endpoint: $e',
+                tag: 'Realtime',
+                err: e,
+              );
+            });
+        return;
+      }
 
       // Manejar evento visitante.actualizado
+      // En lugar de agregar registros, recargar estadísticas desde el endpoint
       if (payload['event'] == 'visitante.actualizado') {
         final data = payload['data'] ?? payload;
         final tipo = data['tipo']?.toString().toLowerCase();
-        final registroJson = data;
 
         if (tipo == 'entrada' || tipo == 'salida') {
-          // Convertir el registro a AttendanceRecord
-          AttendanceRecord record;
-          try {
-            record = AttendanceRecord.fromServerJson(registroJson);
-          } catch (e) {
-            AppLogger.warn(
-              'Error al parsear registro del evento visitante.actualizado: $e',
-              tag: 'Realtime',
-            );
-            return;
-          }
-
-          // Log solo en debug
-          AppLogger.debug(
-            '📥 Evento visitante.actualizado: ${record.name} (${record.role.label})',
+          AppLogger.info(
+            '📥 Evento visitante.actualizado ($tipo) recibido, recargando estadísticas desde endpoint',
             tag: 'Realtime',
           );
 
-          // Verificar si el registro ya existe para evitar duplicados
-          // Comparar por nombre, rol y timestamp (dentro de un rango de 1 minuto)
-          final recordExists = current.records.any((existing) {
-            return existing.name == record.name &&
-                existing.role == record.role &&
-                (existing.recordedAt
-                        .difference(record.recordedAt)
-                        .abs()
-                        .inMinutes <
-                    1);
-          });
-
-          if (recordExists) {
-            AppLogger.debug(
-              '⚠️ Registro duplicado detectado, ignorando: ${record.name} (${record.role.label})',
-              tag: 'Realtime',
-            );
-            return;
-          }
-
-          // Agregar el nuevo registro a los existentes
-          // applyRecord crea una nueva lista con el registro agregado
-          final updated = current.applyRecord(record);
-          _latest = updated;
-
-          _streamController.add(updated);
-          _statusController.add(SocketStatus.connected);
-          _updateResumeToken();
+          // Recargar desde el endpoint en lugar de procesar el registro
+          // Esto asegura que siempre tengamos los datos correctos del backend
+          loadInitialData()
+              .then((updated) {
+                _latest = updated;
+                _streamController.add(updated);
+                _statusController.add(SocketStatus.connected);
+                _updateResumeToken();
+              })
+              .catchError((e) {
+                AppLogger.error(
+                  'Error al recargar estadísticas desde endpoint: $e',
+                  tag: 'Realtime',
+                  err: e,
+                );
+              });
           return;
         }
       }
 
-      // Manejar evento estadisticas.actualizadas (tiene prioridad)
-      if (payload['event'] == 'estadisticas.actualizadas') {
-        final data = payload['data'] ?? payload;
-
-        // Actualizar con las estadísticas recibidas del backend
-        // Estas estadísticas tienen prioridad sobre los cálculos locales
-        final updated = current.mergeFromSocket(data);
-        _latest = updated;
-
-        _streamController.add(updated);
-        _statusController.add(SocketStatus.connected);
-        _updateResumeToken();
+      // Si el payload contiene datos de estadísticas (roles, personas_dentro, asistencias_hoy)
+      // recargar desde el endpoint para asegurar consistencia
+      if (payload.containsKey('roles') ||
+          payload.containsKey('personas_dentro') ||
+          payload.containsKey('asistencias_hoy')) {
+        AppLogger.info(
+          '📊 Detectado payload con estadísticas, recargando desde endpoint',
+          tag: 'Realtime',
+        );
+        loadInitialData()
+            .then((updated) {
+              _latest = updated;
+              _streamController.add(updated);
+              _statusController.add(SocketStatus.connected);
+              _updateResumeToken();
+            })
+            .catchError((e) {
+              AppLogger.error(
+                'Error al recargar estadísticas desde endpoint: $e',
+                tag: 'Realtime',
+                err: e,
+              );
+            });
         return;
       }
 
-      // Compatibilidad: Si hay un registro nuevo del servidor Node.js
-      if (payload.containsKey('record')) {
-        final registroJson = payload['record'];
-        if (registroJson is Map<String, dynamic>) {
-          final record = AttendanceRecord.fromServerJson(registroJson);
-
-          // Verificar duplicados también para el formato de compatibilidad
-          final recordExists = current.records.any((existing) {
-            return existing.name == record.name &&
-                existing.role == record.role &&
-                (existing.recordedAt
-                        .difference(record.recordedAt)
-                        .abs()
-                        .inMinutes <
-                    1);
-          });
-
-          if (recordExists) {
-            AppLogger.debug(
-              '⚠️ Registro duplicado detectado (formato compatibilidad), ignorando: ${record.name}',
-              tag: 'Realtime',
-            );
-            return;
-          }
-
-          final updated = current.applyRecord(record);
-          _latest = updated;
-
-          _streamController.add(updated);
-          _statusController.add(SocketStatus.connected);
-          _updateResumeToken();
-          return;
-        }
-      }
-
-      // Para otros tipos de payload, intentar procesarlos de diferentes maneras
-
-      // Intentar procesar como estadísticas directas
-      if (payload.containsKey('instructores') ||
-          payload.containsKey('aprendices') ||
-          payload.containsKey('funcionarios') ||
-          payload.containsKey('visitantes')) {
-        AppLogger.info(
-          '📊 Detectado formato de estadísticas directas en payload',
-          tag: 'Realtime',
-        );
-        final updated = current.mergeFromSocket(payload);
-        _latest = updated;
-        _streamController.add(updated);
-        _statusController.add(SocketStatus.connected);
-        _updateResumeToken();
-        AppLogger.info(
-          '✅ Estadísticas actualizadas desde payload - '
-          'Instructores: ${updated.instructores}, '
-          'Aprendices: ${updated.aprendices}, '
-          'Funcionarios: ${updated.funcionarios}, '
-          'Visitantes: ${updated.visitantes}',
-          tag: 'Realtime',
-        );
-        return;
-      }
-
-      // Intentar procesar con mergeFromSocket (método genérico)
-      try {
-        final updated = current.mergeFromSocket(payload);
-        // Solo actualizar si hay cambios reales
-        if (updated.instructores != current.instructores ||
-            updated.aprendices != current.aprendices ||
-            updated.funcionarios != current.funcionarios ||
-            updated.visitantes != current.visitantes ||
-            updated.records.length != current.records.length) {
-          _latest = updated;
-          _streamController.add(updated);
-          _statusController.add(SocketStatus.connected);
-          _updateResumeToken();
-        }
-      } catch (e) {
-        AppLogger.warn(
-          '⚠️ No se pudo procesar el payload con mergeFromSocket: $e',
-          tag: 'Realtime',
-        );
-        // Intentar al menos loguear el payload para debugging
-        AppLogger.debug('Payload no procesado: $payload', tag: 'Realtime');
-      }
+      // Ignorar otros tipos de payload que no sean estadísticas
+      // No procesar registros individuales, solo usar datos del endpoint
+      AppLogger.debug(
+        '⚠️ Payload ignorado (no es estadísticas): $payload',
+        tag: 'Realtime',
+      );
     } catch (e, s) {
       AppLogger.error(
         'Error al procesar payload del socket',

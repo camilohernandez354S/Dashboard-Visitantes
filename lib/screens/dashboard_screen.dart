@@ -125,8 +125,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         
         // Actualizar estado cuando lleguen nuevos datos
         setState(() {
-          final previousCount = _latestData?.records.length ?? 0;
-          final newCount = newData.records.length;
+          // Comparar valores anteriores y nuevos para detectar cambios
+          final previousInstructores = _latestData?.instructores ?? 0;
+          final previousAprendices = _latestData?.aprendices ?? 0;
+          final previousFuncionarios = _latestData?.funcionarios ?? 0;
+          final previousVisitantes = _latestData?.visitantes ?? 0;
+          final previousAsistenciasHoy = _latestData?.asistenciasHoy ?? 0;
           
           _latestData = newData;
           _lastRefresh = DateTime.now();
@@ -140,12 +144,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _errorMessage = null;
           _loading = false;
           
-          // Log de actualización
-          if (newCount > previousCount) {
-            // ignore: avoid_print
-            print('✅ UI actualizada - Nuevo registro agregado '
-                  '($previousCount → $newCount registros)');
-          }
+          // Log de actualización con los valores de las tarjetas principales
+          // ignore: avoid_print
+          print(
+            '✅ UI actualizada - '
+            'Instructores: $previousInstructores → ${newData.instructores}, '
+            'Aprendices: $previousAprendices → ${newData.aprendices}, '
+            'Funcionarios: $previousFuncionarios → ${newData.funcionarios}, '
+            'Visitantes: $previousVisitantes → ${newData.visitantes}, '
+            'Asistencias hoy: $previousAsistenciasHoy → ${newData.asistenciasHoy}',
+          );
         });
       },
       onError: (error) {
@@ -374,6 +382,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       : null,
                 ),
                 const SizedBox(height: 16),
+                _buildStatisticsPanel(baselineData, availableWidth),
+                const SizedBox(height: 16),
                 _buildExecutiveSummary(baselineData),
                 const SizedBox(height: 16),
                 Expanded(child: DailyTrendPanel(data: baselineData.hourly)),
@@ -477,6 +487,239 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStatisticsPanel(DashboardData data, double availableWidth) {
+    final List<Widget> statisticsWidgets = [];
+
+    // Agregar tarjeta de asistencias hoy - SIEMPRE mostrar, incluso si es 0
+    final personasDentro = data.personasDentroData;
+    final totalPersonasDentro = personasDentro != null
+        ? (personasDentro['total'] as num?)?.toInt() ?? 0
+        : 0;
+
+    // Mostrar siempre el panel de estadísticas del día
+    statisticsWidgets.add(
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AdminTheme.panelBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Estadísticas del día',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AdminTheme.textDark,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatItem(
+                      'Asistencias hoy',
+                      data.asistenciasHoy,
+                      Icons.event_available_rounded,
+                      AdminTheme.primaryBlue,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildStatItem(
+                      'Personas dentro',
+                      totalPersonasDentro,
+                      Icons.people_rounded,
+                      AdminTheme.successGreen,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+    );
+
+    // Agregar panel de roles si hay datos
+    if (data.rolesData != null && data.rolesData!.isNotEmpty) {
+      final roles = data.rolesData!;
+      final List<Widget> roleItems = [];
+
+      // Mapear nombres de roles a etiquetas más legibles
+      final roleLabels = {
+        'super_administradores': 'Super Administradores',
+        'administradores': 'Administradores',
+        'instructores': 'Instructores',
+        'visitantes': 'Visitantes',
+        'aprendices': 'Aprendices',
+        'aspirantes': 'Aspirantes',
+      };
+
+      roles.forEach((key, value) {
+        if (value is Map<String, dynamic>) {
+          final total = (value['total'] as num?)?.toInt() ?? 0;
+          final activos = (value['activos'] as num?)?.toInt() ?? 0;
+          final inactivos = (value['inactivos'] as num?)?.toInt() ?? 0;
+          final label = roleLabels[key] ?? key;
+
+          if (total > 0 || activos > 0 || inactivos > 0) {
+            roleItems.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AdminTheme.textDark,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildRoleStat('Total', total, AdminTheme.textMuted),
+                    const SizedBox(width: 12),
+                    _buildRoleStat('Activos', activos, AdminTheme.successGreen),
+                    const SizedBox(width: 12),
+                    _buildRoleStat('Inactivos', inactivos, AdminTheme.warningAmber),
+                  ],
+                ),
+              ),
+            );
+          }
+        }
+      });
+
+      if (roleItems.isNotEmpty) {
+        statisticsWidgets.add(
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AdminTheme.panelBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Estadísticas por rol',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AdminTheme.textDark,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...roleItems,
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    if (statisticsWidgets.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      children: statisticsWidgets
+          .map((widget) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: widget,
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildStatItem(
+    String label,
+    int value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AdminTheme.textMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            NumberFormat.decimalPattern().format(value),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoleStat(String label, int value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          NumberFormat.decimalPattern().format(value),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: AdminTheme.textMuted,
+          ),
+        ),
+      ],
     );
   }
 

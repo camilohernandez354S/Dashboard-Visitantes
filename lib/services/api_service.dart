@@ -7,19 +7,23 @@ import 'package:intl/intl.dart';
 /// URL base de la API configurada via --dart-define
 const String apiBase = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://localhost',
+  defaultValue: 'http://10.139.237.174:8000',
 );
 
 class ApiService {
+  /// Convierte un valor dinámico a int de forma segura.
+  static int? _asIntHelper(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return null;
+  }
+
   /// Obtiene las estadísticas del dashboard desde la API.
-  /// Consulta el endpoint /api/websocket/entrada-salida/estadisticas.
-  /// Si el endpoint solo retorna estadísticas sin registros, también consulta
-  /// /api/websocket/entrada-salida/personas-dentro para obtener todos los registros almacenados.
+  /// Consulta el endpoint /api/websocket/estadisticas.
+  /// Parsea la nueva estructura de respuesta con roles, asistencias_hoy y personas_dentro.
   static Future<DashboardData> fetchDashboardData() async {
     try {
-      final uri = Uri.parse(
-        '$apiBase/api/websocket/entrada-salida/estadisticas',
-      );
+      final uri = Uri.parse('$apiBase/api/websocket/estadisticas');
 
       final resp = await http
           .get(uri, headers: {'Accept': 'application/json'})
@@ -28,100 +32,89 @@ class ApiService {
       if (resp.statusCode == 200) {
         final dynamic decoded = jsonDecode(resp.body);
 
-        List<AttendanceRecord> allRecords = [];
-
+        // Manejar formato de respuesta Laravel: {success: true, data: {...}}
+        dynamic responseData = decoded;
         if (decoded is Map<String, dynamic>) {
-          // Primero intentar obtener registros de la respuesta
-          final registrosList =
-              decoded['registros'] ??
-              decoded['data'] ??
-              decoded['personas'] ??
-              decoded['asistencias'];
-          if (registrosList is List && registrosList.isNotEmpty) {
-            allRecords =
-                registrosList
-                    .whereType<Map<String, dynamic>>()
-                    .map((json) {
-                      try {
-                        return AttendanceRecord.fromServerJson(json);
-                      } catch (e) {
-                        // ignore: avoid_print
-                        print(
-                          '⚠️ [ApiService] Error al parsear registro: $e - JSON: $json',
-                        );
-                        return null;
-                      }
-                    })
-                    .whereType<AttendanceRecord>()
-                    .where((record) => record.role.isTracked)
-                    .toList();
+          if (decoded.containsKey('success') && decoded.containsKey('data')) {
+            responseData = decoded['data'];
+          } else if (decoded.containsKey('data')) {
+            responseData = decoded['data'];
           }
         }
 
-        // Si no se obtuvieron registros del endpoint de estadísticas,
-        // intentar obtenerlos del endpoint de personas-dentro
-        if (allRecords.isEmpty) {
-          try {
-            final personasDentro = await fetchPersonasDentro();
-            allRecords =
-                personasDentro
-                    .map((json) {
-                      try {
-                        // Intentar primero con fromServerJson (formato Laravel)
-                        // Si falla, intentar con fromJson (formato genérico)
-                        try {
-                          // Verificar si tiene los campos necesarios para fromServerJson
-                          final hasRol =
-                              json.containsKey('rol') ||
-                              json.containsKey('tipo_persona');
-                          final hasHora =
-                              json.containsKey('hora') ||
-                              json.containsKey('hora_entrada') ||
-                              json.containsKey('timestamp_entrada');
+        // Parsear la nueva estructura de estadísticas
+        if (responseData is Map<String, dynamic>) {
+          // Extraer datos de personas_dentro (conteos actuales) - ESTA ES LA FUENTE DE VERDAD
+          final personasDentro =
+              responseData['personas_dentro'] as Map<String, dynamic>?;
 
-                          if (hasRol && hasHora) {
-                            return AttendanceRecord.fromServerJson(json);
-                          } else {
-                            return AttendanceRecord.fromJson(json);
-                          }
-                        } catch (e) {
-                          // Si fromServerJson falla, intentar con fromJson
-                          return AttendanceRecord.fromJson(json);
-                        }
-                      } catch (e) {
-                        return null;
-                      }
-                    })
-                    .whereType<AttendanceRecord>()
-                    .where((record) => record.role.isTracked)
-                    .toList();
-          } catch (e) {
-            // Solo loguear errores críticos
-            // ignore: avoid_print
-            print('❌ [ApiService] Error al obtener personas-dentro: $e');
+          // Extraer datos de roles (totales, activos, inactivos) - SOLO PARA MOSTRAR EN EL PANEL
+          final roles = responseData['roles'] as Map<String, dynamic>?;
+
+          // Extraer asistencias_hoy
+          final asistenciasHoy = responseData['asistencias_hoy'] as int? ?? 0;
+
+          // Mapear personas_dentro a los campos del modelo (ESTA ES LA FUENTE PRINCIPAL)
+          int instructores = 0;
+          int aprendices = 0;
+          int funcionarios = 0;
+          int visitantes = 0;
+
+          if (personasDentro != null) {
+            // Usar SOLO personas_dentro para los conteos actuales
+            instructores = _asIntHelper(personasDentro['instructores']) ?? 0;
+            aprendices = _asIntHelper(personasDentro['aprendices']) ?? 0;
+            // Mapear administrativos a funcionarios
+            funcionarios = _asIntHelper(personasDentro['administrativos']) ?? 0;
+            visitantes = _asIntHelper(personasDentro['visitantes']) ?? 0;
           }
-        }
 
-        // Si tenemos registros, crear DashboardData desde ellos
-        if (allRecords.isNotEmpty) {
-          final data = DashboardData.fromRecords(allRecords);
-          return data;
-        }
+          // Crear DashboardData con los datos extraídos del endpoint
+          // NO calcular desde registros, usar SOLO los datos del endpoint
+          final data = DashboardData(
+            instructores: instructores,
+            aprendices: aprendices,
+            funcionarios: funcionarios,
+            visitantes: visitantes,
+            variations: const {},
+            weekly: const [],
+            hourly: const [],
+            records:
+                const [], // NO usar registros, solo estadísticas del endpoint
+            asistenciasHoy: asistenciasHoy,
+            rolesData: roles,
+            personasDentroData: personasDentro,
+          );
 
-        // Si no hay registros pero hay estadísticas, usar las estadísticas
-        if (decoded is Map<String, dynamic> &&
-            (decoded.containsKey('instructores') ||
-                decoded.containsKey('aprendices') ||
-                decoded.containsKey('funcionarios') ||
-                decoded.containsKey('visitantes'))) {
-          final data = DashboardData.fromJson(decoded);
+          // ignore: avoid_print
+          print(
+            '✅ [ApiService] Estadísticas cargadas desde endpoint - '
+            'Instructores: $instructores, '
+            'Aprendices: $aprendices, '
+            'Funcionarios: $funcionarios, '
+            'Visitantes: $visitantes, '
+            'Asistencias hoy: $asistenciasHoy',
+          );
+
           return data;
         }
 
         // Si no hay nada, retornar datos vacíos
         return DashboardData.fromRecords([]);
+      } else if (resp.statusCode == 500) {
+        final dynamic decoded = jsonDecode(resp.body);
+        final message =
+            decoded is Map<String, dynamic>
+                ? (decoded['message'] ?? 'Error al obtener estadísticas')
+                : 'Error al obtener estadísticas';
+        throw Exception('Error HTTP ${resp.statusCode}: $message');
       } else {
-        throw Exception('Error HTTP ${resp.statusCode}');
+        final dynamic decoded = jsonDecode(resp.body);
+        final message =
+            decoded is Map<String, dynamic>
+                ? (decoded['message'] ?? decoded.toString())
+                : decoded.toString();
+        throw Exception('Error HTTP ${resp.statusCode}: $message');
       }
     } on TimeoutException {
       rethrow;
@@ -132,12 +125,11 @@ class ApiService {
     }
   }
 
-  /// Obtiene la lista de personas actualmente dentro del centro.
-  static Future<List<Map<String, dynamic>>> fetchPersonasDentro() async {
+  /// Obtiene la lista de visitantes actualmente dentro del centro.
+  /// Endpoint: GET /api/websocket/visitantes-actuales
+  static Future<List<Map<String, dynamic>>> fetchVisitantesActuales() async {
     try {
-      final uri = Uri.parse(
-        '$apiBase/api/websocket/entrada-salida/personas-dentro',
-      );
+      final uri = Uri.parse('$apiBase/api/websocket/visitantes-actuales');
 
       final resp = await http
           .get(uri, headers: {'Accept': 'application/json'})
@@ -146,30 +138,165 @@ class ApiService {
       if (resp.statusCode == 200) {
         final dynamic decoded = jsonDecode(resp.body);
 
+        // Manejar formato Laravel: {success: true, data: [...]}
         if (decoded is List) {
           return decoded.whereType<Map<String, dynamic>>().toList();
         } else if (decoded is Map<String, dynamic>) {
-          if (decoded.containsKey('data')) {
+          // Verificar formato Laravel
+          if (decoded.containsKey('success') && decoded.containsKey('data')) {
             final data = decoded['data'];
             if (data is List) {
               return data.whereType<Map<String, dynamic>>().toList();
             } else if (data is Map) {
-              // Error: el endpoint está retornando estadísticas en lugar de personas
+              // Error: el endpoint está retornando estadísticas en lugar de visitantes
               // ignore: avoid_print
               print(
-                '❌ [ApiService] ERROR: El endpoint /personas-dentro está retornando estadísticas (Map) en lugar de una lista de personas. Verifica la ruta en el backend.',
+                '❌ [ApiService] ERROR: El endpoint /visitantes-actuales está retornando estadísticas (Map) en lugar de una lista de visitantes. Verifica la ruta en el backend.',
+              );
+              return [];
+            }
+          } else if (decoded.containsKey('data')) {
+            final data = decoded['data'];
+            if (data is List) {
+              return data.whereType<Map<String, dynamic>>().toList();
+            } else if (data is Map) {
+              // ignore: avoid_print
+              print(
+                '❌ [ApiService] ERROR: El endpoint /visitantes-actuales está retornando estadísticas (Map) en lugar de una lista de visitantes.',
               );
               return [];
             }
           }
         }
         return [];
+      } else if (resp.statusCode == 500) {
+        final dynamic decoded = jsonDecode(resp.body);
+        final message =
+            decoded is Map<String, dynamic>
+                ? (decoded['message'] ?? 'Error al obtener visitantes actuales')
+                : 'Error al obtener visitantes actuales';
+        throw Exception('Error HTTP ${resp.statusCode}: $message');
       } else {
-        throw Exception('Error HTTP ${resp.statusCode}');
+        final dynamic decoded = jsonDecode(resp.body);
+        final message =
+            decoded is Map<String, dynamic>
+                ? (decoded['message'] ?? decoded.toString())
+                : decoded.toString();
+        throw Exception('Error HTTP ${resp.statusCode}: $message');
       }
     } catch (e) {
       // ignore: avoid_print
-      print('❌ [ApiService] Error al obtener personas dentro: $e');
+      print('❌ [ApiService] Error al obtener visitantes actuales: $e');
+      rethrow;
+    }
+  }
+
+  /// Registra una entrada de visitante.
+  /// Endpoint: POST /api/websocket/entrada
+  static Future<Map<String, dynamic>> registrarEntrada({
+    required int personaId,
+    required String nombre,
+    required String documento,
+    required String rol,
+    String? ficha,
+    String? ambiente,
+  }) async {
+    try {
+      final uri = Uri.parse('$apiBase/api/websocket/entrada');
+      final body = {
+        'persona_id': personaId,
+        'nombre': nombre,
+        'documento': documento,
+        'rol': rol,
+        if (ficha != null) 'ficha': ficha,
+        if (ambiente != null) 'ambiente': ambiente,
+      };
+
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        // Si viene con formato Laravel {success: true, ...}, retornar todo el objeto
+        return decoded;
+      } else if (response.statusCode == 422) {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        final errors =
+            decoded['errors'] ?? decoded['message'] ?? 'Error de validación';
+        throw Exception('Error de validación (HTTP 422): $errors');
+      } else if (response.statusCode == 500) {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        final message = decoded['message'] ?? 'Error al registrar entrada';
+        throw Exception('Error HTTP ${response.statusCode}: $message');
+      } else {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>?;
+        final message = decoded?['message'] ?? response.body;
+        throw Exception('Error HTTP ${response.statusCode}: $message');
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('❌ [ApiService] Error al registrar entrada: $e');
+      rethrow;
+    }
+  }
+
+  /// Registra una salida de visitante.
+  /// Endpoint: POST /api/websocket/salida
+  static Future<Map<String, dynamic>> registrarSalida({
+    required int personaId,
+    required String nombre,
+    required String documento,
+    required String rol,
+  }) async {
+    try {
+      final uri = Uri.parse('$apiBase/api/websocket/salida');
+      final body = {
+        'persona_id': personaId,
+        'nombre': nombre,
+        'documento': documento,
+        'rol': rol,
+      };
+
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        // Si viene con formato Laravel {success: true, ...}, retornar todo el objeto
+        return decoded;
+      } else if (response.statusCode == 422) {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        final errors =
+            decoded['errors'] ?? decoded['message'] ?? 'Error de validación';
+        throw Exception('Error de validación (HTTP 422): $errors');
+      } else if (response.statusCode == 500) {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        final message = decoded['message'] ?? 'Error al registrar salida';
+        throw Exception('Error HTTP ${response.statusCode}: $message');
+      } else {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>?;
+        final message = decoded?['message'] ?? response.body;
+        throw Exception('Error HTTP ${response.statusCode}: $message');
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('❌ [ApiService] Error al registrar salida: $e');
       rethrow;
     }
   }
@@ -185,6 +312,9 @@ class DashboardData {
   final List<WeeklyAttendance> weekly;
   final List<HourlyAttendance> hourly;
   final List<AttendanceRecord> records;
+  final int asistenciasHoy;
+  final Map<String, dynamic>? rolesData;
+  final Map<String, dynamic>? personasDentroData;
 
   const DashboardData({
     required this.instructores,
@@ -195,6 +325,9 @@ class DashboardData {
     required this.weekly,
     required this.hourly,
     required this.records,
+    this.asistenciasHoy = 0,
+    this.rolesData,
+    this.personasDentroData,
   });
 
   DashboardData copyWith({
@@ -206,6 +339,9 @@ class DashboardData {
     List<WeeklyAttendance>? weekly,
     List<HourlyAttendance>? hourly,
     List<AttendanceRecord>? records,
+    int? asistenciasHoy,
+    Map<String, dynamic>? rolesData,
+    Map<String, dynamic>? personasDentroData,
   }) {
     return DashboardData(
       instructores: instructores ?? this.instructores,
@@ -216,6 +352,9 @@ class DashboardData {
       weekly: List.unmodifiable(weekly ?? this.weekly),
       hourly: List.unmodifiable(hourly ?? this.hourly),
       records: List.unmodifiable(records ?? this.records),
+      asistenciasHoy: asistenciasHoy ?? this.asistenciasHoy,
+      rolesData: rolesData ?? this.rolesData,
+      personasDentroData: personasDentroData ?? this.personasDentroData,
     );
   }
 
@@ -361,6 +500,12 @@ class DashboardData {
       hourly:
           hourlyList.isNotEmpty ? hourlyList : HourlyAttendance.fromRecords([]),
       records: const [],
+      asistenciasHoy:
+          json['asistencias_hoy'] is int
+              ? json['asistencias_hoy'] as int
+              : (json['asistencias_hoy'] as num?)?.toInt() ?? 0,
+      rolesData: json['roles'] as Map<String, dynamic>?,
+      personasDentroData: json['personas_dentro'] as Map<String, dynamic>?,
     );
   }
 
@@ -418,6 +563,9 @@ class DashboardData {
       weekly: WeeklyAttendance.fromRecords(current),
       hourly: HourlyAttendance.fromRecords(current),
       records: List.unmodifiable(current),
+      asistenciasHoy: 0,
+      rolesData: null,
+      personasDentroData: null,
     );
   }
 

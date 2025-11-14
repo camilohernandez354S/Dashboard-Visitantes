@@ -36,7 +36,7 @@ class AppConfig {
     );
     final String reverbAppKey = const String.fromEnvironment(
       'REVERB_APP_KEY',
-      defaultValue: 'local',
+      defaultValue: '8c77ba6acf0de58189211e938930fe72',
     );
 
     Uri? parseUri(String raw) {
@@ -73,7 +73,7 @@ class AppConfig {
     return AppConfig._(
       apiBaseUrl: Uri.parse('http://10.139.237.174:8000'),
       wsDashboardUrl: Uri.parse('ws://10.139.237.174:8080'),
-      reverbAppKey: 'local',
+      reverbAppKey: '8c77ba6acf0de58189211e938930fe72',
     );
   }
 }

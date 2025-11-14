@@ -51,7 +51,7 @@ class _HourlyEntriesChartState extends State<HourlyEntriesChart> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Container(
-        height: 400,
+        height: 300,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
@@ -72,7 +72,7 @@ class _HourlyEntriesChartState extends State<HourlyEntriesChart> {
 
     if (_errorMessage != null) {
       return Container(
-        height: 400,
+        height: 300,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
@@ -238,7 +238,7 @@ class _HourlyEntriesChartState extends State<HourlyEntriesChart> {
           ),
               const SizedBox(height: 24),
               SizedBox(
-                height: 380,
+                height: 280,
                 child: BarChart(
                   BarChartData(
                     alignment: BarChartAlignment.spaceAround,

@@ -37,18 +37,8 @@ class StatCard extends StatelessWidget {
     // ignore: avoid_print
     print('🎨 [StatCard] ${title} - Breakdown: $_breakdown (isEmpty: ${_breakdown.isEmpty})');
     
-    final bool isPositive = variation >= 0;
-    final bool isNeutral = variation == 0;
-    final Color variationColor =
-        isNeutral
-            ? const Color(0xFF6C757D)
-            : (isPositive ? const Color(0xFF28A745) : const Color(0xFFD64545));
-    final IconData variationIcon =
-        isNeutral
-            ? Icons.horizontal_rule_rounded
-            : (isPositive
-                ? Icons.arrow_upward_rounded
-                : Icons.arrow_downward_rounded);
+    // El porcentaje siempre es positivo (es un porcentaje del total)
+    final Color variationColor = const Color(0xFF6C757D);
 
     final formattedValue = NumberFormat.decimalPattern().format(value);
 
@@ -121,20 +111,13 @@ class StatCard extends StatelessWidget {
                   color: variationColor.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(variationIcon, size: 14, color: variationColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${variation.abs().toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: variationColor,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  '${variation.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: variationColor,
+                  ),
                 ),
               ),
               if (_trend.isNotEmpty && _trend.any((v) => v > 0)) ...[

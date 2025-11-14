@@ -30,14 +30,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime _currentTime = DateTime.now();
   DateTime? _lastRefresh;
   Timer? _clockTimer;
+  Timer? _autoRefreshTimer;
   bool _isFullscreen = false;
   StreamSubscription<DashboardData>? _realtimeDataSubscription;
+
+  // Intervalo de actualización automática (30 segundos)
+  static const Duration _autoRefreshInterval = Duration(seconds: 5);
 
   @override
   void initState() {
     super.initState();
     _realtimeController = DashboardRealtimeController();
     _startClock();
+    _startAutoRefresh();
     // ═══════════════════════════════════════════════════════════
     // ORDEN DE INICIALIZACIÓN CRÍTICO:
     // 1. Primero configurar los streams (para escuchar actualizaciones)
@@ -52,6 +57,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() => _currentTime = DateTime.now());
+    });
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) {
+      if (!mounted) return;
+      // Actualizar datos automáticamente sin mostrar loading
+      _refreshFromApi(initial: false);
     });
   }
 
@@ -185,6 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _clockTimer?.cancel();
+    _autoRefreshTimer?.cancel();
     // Cancelar suscripción al stream de datos
     _realtimeDataSubscription?.cancel();
     _realtimeController.dispose();
@@ -398,7 +413,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const HourlyEntriesChart(),
                         const SizedBox(height: 16),
                         SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.4,
+                          height: MediaQuery.of(context).size.height * 0.25,
                           child: DailyTrendPanel(data: baselineData.hourly),
                         ),
                         const SizedBox(height: 14),
@@ -432,13 +447,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String? tooltip,
   ) {
     final spacing = 18.0;
+
+    // Calcular el total para obtener porcentajes
+    final total =
+        data.instructores +
+        data.aprendices +
+        data.funcionarios +
+        data.visitantes;
+
+    // Función para calcular el porcentaje del total
+    double percentageOfTotal(int value) {
+      if (total == 0) return 0.0;
+      return (value / total * 100);
+    }
+
     final metrics = [
       (
         'Instructor',
         data.instructores,
         Icons.person_3_rounded,
         AdminTheme.primaryBlue,
-        data.variationFor('instructores'),
+        percentageOfTotal(data.instructores),
         data.getBreakdownBySede(AttendanceRole.instructor),
         data.getWeeklyTrend(AttendanceRole.instructor),
       ),
@@ -447,7 +476,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         data.aprendices,
         Icons.school_rounded,
         AdminTheme.successGreen,
-        data.variationFor('aprendices'),
+        percentageOfTotal(data.aprendices),
         data.getBreakdownBySede(AttendanceRole.aprendiz),
         data.getWeeklyTrend(AttendanceRole.aprendiz),
       ),
@@ -456,7 +485,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         data.funcionarios,
         Icons.badge_rounded,
         AdminTheme.warningAmber,
-        data.variationFor('funcionarios'),
+        percentageOfTotal(data.funcionarios),
         data.getBreakdownBySede(AttendanceRole.funcionario),
         data.getWeeklyTrend(AttendanceRole.funcionario),
       ),
@@ -465,7 +494,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         data.visitantes,
         Icons.directions_walk_rounded,
         AdminTheme.infoTeal,
-        data.variationFor('visitantes'),
+        percentageOfTotal(data.visitantes),
         data.getBreakdownBySede(AttendanceRole.visitante),
         data.getWeeklyTrend(AttendanceRole.visitante),
       ),

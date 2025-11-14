@@ -233,7 +233,17 @@ class SocketService {
     // Solo omitir el path si explícitamente se indica que es un servidor simple
     if (_reverbAppKey.isNotEmpty && base.path.isEmpty) {
       final path = '/app/$_reverbAppKey';
-      final finalUri = base.replace(path: path);
+      // Agregar query parameters requeridos por el protocolo Pusher
+      final queryParameters = {
+        'protocol': '7',
+        'client': 'js',
+        'version': '1.0',
+        ...base.queryParameters, // Preservar query params existentes si los hay
+      };
+      final finalUri = base.replace(
+        path: path,
+        queryParameters: queryParameters,
+      );
       AppLogger.info(
         '🔗 Agregando path de Reverb: $path (clave: $_reverbAppKey)',
         tag: 'Socket',
@@ -353,10 +363,9 @@ class SocketService {
     if (event == 'pusher:error') {
       final errorData = message['data'];
       final errorCode = errorData is Map ? errorData['code'] : null;
-      final errorMessage =
-          errorData is Map
-              ? errorData['message']
-              : errorData?.toString() ?? 'Error desconocido';
+      final errorMessage = errorData is Map
+          ? errorData['message']
+          : errorData?.toString() ?? 'Error desconocido';
 
       AppLogger.error(
         '❌ Error de Pusher: $errorMessage (Código: $errorCode)',
@@ -451,10 +460,40 @@ class SocketService {
           data = message;
         }
 
+        // Formatear y mostrar información destacada del evento
+        final tipo = data['tipo']?.toString() ?? 'desconocido';
+        final visitante = data['visitante'] is Map
+            ? Map<String, dynamic>.from(data['visitante'] as Map)
+            : null;
+        final visitanteId = visitante?['id']?.toString() ?? 'N/A';
+        final visitanteNombre = visitante?['nombre']?.toString() ?? 'N/A';
+        final visitanteDocumento = visitante?['documento']?.toString() ?? 'N/A';
+        final visitanteRol = visitante?['rol']?.toString() ?? 'N/A';
+        final horaEntrada = visitante?['hora_entrada']?.toString();
+        final horaSalida = visitante?['hora_salida']?.toString();
+        final hora = horaEntrada ?? horaSalida ?? 'N/A';
+        final timestamp = data['timestamp']?.toString() ?? 'N/A';
+
+        // Log destacado con la información solicitada
         AppLogger.info(
-          '✅ Evento de asistencia recibido ($event) - Data: $data',
+          '\n'
+          '═══════════════════════════════════════════════════════════\n'
+          '📥 EVENTO DE VISITANTE RECIBIDO\n'
+          '═══════════════════════════════════════════════════════════\n'
+          'Tipo: $tipo\n'
+          'ID: $visitanteId\n'
+          'Nombre: $visitanteNombre\n'
+          'Documento: $visitanteDocumento\n'
+          'Rol: $visitanteRol\n'
+          'Hora: $hora\n'
+          'Timestamp: $timestamp\n'
+          '═══════════════════════════════════════════════════════════\n'
+          'JSON Completo:\n'
+          '═══════════════════════════════════════════════════════════',
           tag: 'Socket',
         );
+        AppLogger.info('📋 ${jsonEncode(data)}', tag: 'Socket');
+
         // El evento contiene información de entrada/salida
         _controller.add({'event': 'visitante.actualizado', 'data': data});
         return;
@@ -692,10 +731,9 @@ class SocketService {
     }
 
     // Si hay un error de aplicación no existente, aumentar el delay para evitar spam
-    final delay =
-        _lastErrorWasAppNotFound
-            ? const Duration(seconds: 15)
-            : const Duration(seconds: 5);
+    final delay = _lastErrorWasAppNotFound
+        ? const Duration(seconds: 15)
+        : const Duration(seconds: 5);
 
     _scheduleReconnectWithDelay(delay);
   }

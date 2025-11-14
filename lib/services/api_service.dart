@@ -300,6 +300,86 @@ class ApiService {
       rethrow;
     }
   }
+
+  /// Obtiene las entradas por hora desde el endpoint.
+  /// Endpoint: GET /api/websocket/entradas-por-hora
+  static Future<EntradasPorHoraData> fetchEntradasPorHora() async {
+    try {
+      final uri = Uri.parse('$apiBase/api/websocket/entradas-por-hora');
+
+      final resp = await http
+          .get(uri, headers: {'Accept': 'application/json'})
+          .timeout(const Duration(seconds: 6));
+
+      if (resp.statusCode == 200) {
+        final dynamic decoded = jsonDecode(resp.body);
+
+        // Manejar formato de respuesta Laravel: {success: true, data: {...}}
+        dynamic responseData = decoded;
+        if (decoded is Map<String, dynamic>) {
+          if (decoded.containsKey('success') && decoded.containsKey('data')) {
+            responseData = decoded['data'];
+          } else if (decoded.containsKey('data')) {
+            responseData = decoded['data'];
+          }
+        }
+
+        if (responseData is Map<String, dynamic>) {
+          final fecha = responseData['fecha'] as String? ?? '';
+          final sedeId = _asIntHelper(responseData['sede_id']) ?? 0;
+          final series = responseData['series'] as List<dynamic>? ?? [];
+
+          final entradas =
+              series
+                  .map((item) {
+                    if (item is Map<String, dynamic>) {
+                      final hora = item['hora'] as String? ?? '';
+                      final total = _asIntHelper(item['total']) ?? 0;
+                      return EntradaPorHora(hora: hora, total: total);
+                    }
+                    return null;
+                  })
+                  .whereType<EntradaPorHora>()
+                  .toList();
+
+          return EntradasPorHoraData(
+            fecha: fecha,
+            sedeId: sedeId,
+            entradas: entradas,
+          );
+        }
+
+        throw Exception('Formato de respuesta inválido');
+      } else {
+        throw Exception('Error HTTP ${resp.statusCode}: ${resp.body}');
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('❌ [ApiService] Error al obtener entradas por hora: $e');
+      rethrow;
+    }
+  }
+}
+
+/// Modelo para datos de entradas por hora.
+class EntradaPorHora {
+  final String hora;
+  final int total;
+
+  const EntradaPorHora({required this.hora, required this.total});
+}
+
+/// Modelo para la respuesta completa de entradas por hora.
+class EntradasPorHoraData {
+  final String fecha;
+  final int sedeId;
+  final List<EntradaPorHora> entradas;
+
+  const EntradasPorHoraData({
+    required this.fecha,
+    required this.sedeId,
+    required this.entradas,
+  });
 }
 
 /// Entidad principal con los datos del dashboard.

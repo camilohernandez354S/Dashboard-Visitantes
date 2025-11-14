@@ -9,6 +9,7 @@ import '../services/api_service.dart' show DashboardData, AttendanceRole;
 import '../services/socket_service.dart';
 import '../theme/admin_theme.dart';
 import '../widgets/daily_trend_panel.dart';
+import '../widgets/hourly_entries_chart.dart';
 import '../widgets/stat_card.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -71,7 +72,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       print('🔄 [DashboardScreen] Iniciando carga de datos desde API...');
       final result = await _realtimeController.loadInitialData();
       if (!mounted) return;
-      
+
       // ignore: avoid_print
       print(
         '✅ [DashboardScreen] Datos recibidos - '
@@ -79,7 +80,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'Aprendices: ${result.aprendices}, '
         'Total registros: ${result.records.length}',
       );
-      
+
       setState(() {
         _initialData = result;
         _latestData = result;
@@ -87,7 +88,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _loading = false;
         _errorMessage = null;
       });
-      
+
       // ignore: avoid_print
       print('✅ [DashboardScreen] Estado actualizado en la UI');
     } catch (e, stackTrace) {
@@ -107,7 +108,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Iniciar conexión WebSocket
     _realtimeController.startRealtime();
     _socketStatusStream = _realtimeController.socketStatus;
-    
+
     // ═══════════════════════════════════════════════════════════
     // SUSCRIBIRSE AL STREAM DE DATOS EN TIEMPO REAL
     // ═══════════════════════════════════════════════════════════
@@ -116,13 +117,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _realtimeDataSubscription = _realtimeController.stream.listen(
       (newData) {
         if (!mounted) return;
-        
+
         // ignore: avoid_print
-        print('🔄 Actualización recibida del stream - '
-              'Instructores: ${newData.instructores}, '
-              'Aprendices: ${newData.aprendices}, '
-              'Total registros: ${newData.records.length}');
-        
+        print(
+          '🔄 Actualización recibida del stream - '
+          'Instructores: ${newData.instructores}, '
+          'Aprendices: ${newData.aprendices}, '
+          'Total registros: ${newData.records.length}',
+        );
+
         // Actualizar estado cuando lleguen nuevos datos
         setState(() {
           // Comparar valores anteriores y nuevos para detectar cambios
@@ -131,19 +134,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final previousFuncionarios = _latestData?.funcionarios ?? 0;
           final previousVisitantes = _latestData?.visitantes ?? 0;
           final previousAsistenciasHoy = _latestData?.asistenciasHoy ?? 0;
-          
+
           _latestData = newData;
           _lastRefresh = DateTime.now();
-          
+
           // Si aún no hay datos iniciales, establecerlos
           if (_initialData == null) {
             _initialData = newData;
           }
-          
+
           // Limpiar error si había uno
           _errorMessage = null;
           _loading = false;
-          
+
           // Log de actualización con los valores de las tarjetas principales
           // ignore: avoid_print
           print(
@@ -254,7 +257,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    final baselineData = _latestData ?? _initialData ?? DashboardData.fromRecords([]);
+    final baselineData =
+        _latestData ?? _initialData ?? DashboardData.fromRecords([]);
 
     final appBar =
         _isFullscreen
@@ -350,44 +354,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Monitoreo en tiempo real de asistencia por sede — Centro Agroindustrial del Guaviare',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AdminTheme.textMuted,
-                  ),
-                ),
-                if (_isFullscreen) ...[
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AdminTheme.appBar,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                      ),
-                      onPressed: _toggleFullscreen,
-                      icon: const Icon(Icons.fullscreen_exit_rounded),
-                      label: const Text('Salir de pantalla completa'),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Monitoreo en tiempo real de asistencia por sede — Centro Agroindustrial del Guaviare',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AdminTheme.textMuted,
+                          ),
+                        ),
+                        if (_isFullscreen) ...[
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.topRight,
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AdminTheme.appBar,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                              ),
+                              onPressed: _toggleFullscreen,
+                              icon: const Icon(Icons.fullscreen_exit_rounded),
+                              label: const Text('Salir de pantalla completa'),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        _buildMetricCards(
+                          availableWidth,
+                          baselineData,
+                          _lastRefresh != null
+                              ? 'Última actualización: ${DateFormat('HH:mm:ss').format(_lastRefresh!)}'
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildStatisticsPanel(baselineData, availableWidth),
+                        const SizedBox(height: 16),
+                        const HourlyEntriesChart(),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.4,
+                          child: DailyTrendPanel(data: baselineData.hourly),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
                     ),
                   ),
-                ],
-                const SizedBox(height: 12),
-                _buildMetricCards(
-                  availableWidth,
-                  baselineData,
-                  _lastRefresh != null
-                      ? 'Última actualización: ${DateFormat('HH:mm:ss').format(_lastRefresh!)}'
-                      : null,
                 ),
-                const SizedBox(height: 16),
-                _buildStatisticsPanel(baselineData, availableWidth),
-                const SizedBox(height: 16),
-                _buildExecutiveSummary(baselineData),
-                const SizedBox(height: 16),
-                Expanded(child: DailyTrendPanel(data: baselineData.hourly)),
-                const SizedBox(height: 14),
                 _buildFooter(),
               ],
             ),
@@ -495,172 +513,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Agregar tarjeta de asistencias hoy - SIEMPRE mostrar, incluso si es 0
     final personasDentro = data.personasDentroData;
-    final totalPersonasDentro = personasDentro != null
-        ? (personasDentro['total'] as num?)?.toInt() ?? 0
-        : 0;
+    final totalPersonasDentro =
+        personasDentro != null
+            ? (personasDentro['total'] as num?)?.toInt() ?? 0
+            : 0;
 
     // Mostrar siempre el panel de estadísticas del día
     statisticsWidgets.add(
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AdminTheme.panelBorder),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Estadísticas del día',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AdminTheme.textDark,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatItem(
-                      'Asistencias hoy',
-                      data.asistenciasHoy,
-                      Icons.event_available_rounded,
-                      AdminTheme.primaryBlue,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildStatItem(
-                      'Personas dentro',
-                      totalPersonasDentro,
-                      Icons.people_rounded,
-                      AdminTheme.successGreen,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AdminTheme.panelBorder),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-    );
-
-    // Agregar panel de roles si hay datos
-    if (data.rolesData != null && data.rolesData!.isNotEmpty) {
-      final roles = data.rolesData!;
-      final List<Widget> roleItems = [];
-
-      // Mapear nombres de roles a etiquetas más legibles
-      final roleLabels = {
-        'super_administradores': 'Super Administradores',
-        'administradores': 'Administradores',
-        'instructores': 'Instructores',
-        'visitantes': 'Visitantes',
-        'aprendices': 'Aprendices',
-        'aspirantes': 'Aspirantes',
-      };
-
-      roles.forEach((key, value) {
-        if (value is Map<String, dynamic>) {
-          final total = (value['total'] as num?)?.toInt() ?? 0;
-          final activos = (value['activos'] as num?)?.toInt() ?? 0;
-          final inactivos = (value['inactivos'] as num?)?.toInt() ?? 0;
-          final label = roleLabels[key] ?? key;
-
-          if (total > 0 || activos > 0 || inactivos > 0) {
-            roleItems.add(
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AdminTheme.textDark,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    _buildRoleStat('Total', total, AdminTheme.textMuted),
-                    const SizedBox(width: 12),
-                    _buildRoleStat('Activos', activos, AdminTheme.successGreen),
-                    const SizedBox(width: 12),
-                    _buildRoleStat('Inactivos', inactivos, AdminTheme.warningAmber),
-                  ],
-                ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Estadísticas del día',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AdminTheme.textDark,
               ),
-            );
-          }
-        }
-      });
-
-      if (roleItems.isNotEmpty) {
-        statisticsWidgets.add(
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AdminTheme.panelBorder),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                ),
-              ],
             ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 16),
+            Row(
               children: [
-                const Text(
-                  'Estadísticas por rol',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AdminTheme.textDark,
+                Expanded(
+                  child: _buildStatItem(
+                    'Asistencias hoy',
+                    data.asistenciasHoy,
+                    Icons.event_available_rounded,
+                    AdminTheme.primaryBlue,
                   ),
                 ),
-                const SizedBox(height: 16),
-                ...roleItems,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatItem(
+                    'Personas dentro',
+                    totalPersonasDentro,
+                    Icons.people_rounded,
+                    AdminTheme.successGreen,
+                  ),
+                ),
               ],
             ),
-          ),
-        );
-      }
-    }
+          ],
+        ),
+      ),
+    );
 
     if (statisticsWidgets.isEmpty) {
       return const SizedBox.shrink();
     }
 
     return Column(
-      children: statisticsWidgets
-          .map((widget) => Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: widget,
-              ))
-          .toList(),
+      children:
+          statisticsWidgets
+              .map(
+                (widget) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: widget,
+                ),
+              )
+              .toList(),
     );
   }
 
-  Widget _buildStatItem(
-    String label,
-    int value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildStatItem(String label, int value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -692,115 +621,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               fontSize: 24,
               fontWeight: FontWeight.w700,
               color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRoleStat(String label, int value, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          NumberFormat.decimalPattern().format(value),
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: AdminTheme.textMuted,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildExecutiveSummary(DashboardData data) {
-    final total = data.weeklyTotal;
-    final variation = data.variationFor('aprendices');
-    final sedeDistribution = data.getSedeDistribution();
-
-    String summaryText;
-    if (total == 0) {
-      summaryText = 'Aún no se han registrado asistencias esta semana. '
-          'Los datos se actualizarán en tiempo real cuando se registren visitantes.';
-    } else {
-      final variationText = variation == 0.0
-          ? 'sin variación'
-          : variation > 0
-              ? 'con un crecimiento del ${variation.toStringAsFixed(1)}%'
-              : 'con una disminución del ${variation.abs().toStringAsFixed(1)}%';
-      
-      if (sedeDistribution.isEmpty) {
-        summaryText = 'Esta semana se registraron $total asistencias en total, '
-            '$variationText frente a la semana anterior.';
-      } else {
-        // Obtener la sede con mayor porcentaje
-        final topSede = sedeDistribution.entries.reduce(
-          (a, b) => a.value > b.value ? a : b,
-        );
-        final otherSedes = sedeDistribution.entries
-            .where((e) => e.key != topSede.key)
-            .toList()
-          ..sort((a, b) => b.value.compareTo(a.value));
-        
-        String sedeText;
-        if (otherSedes.isEmpty) {
-          sedeText = 'Todos los registros pertenecen a la sede ${topSede.key}.';
-        } else if (otherSedes.length == 1) {
-          sedeText = 'La sede ${topSede.key} concentró el ${(topSede.value * 100).toStringAsFixed(0)}% '
-              'de los registros, seguida por ${otherSedes.first.key}.';
-        } else {
-          final secondSede = otherSedes.first.key;
-          sedeText = 'La sede ${topSede.key} concentró el ${(topSede.value * 100).toStringAsFixed(0)}% '
-              'de los registros, seguida por ${secondSede} y otras sedes.';
-        }
-        
-        summaryText = 'Esta semana se registraron $total asistencias en total, '
-            '$variationText frente a la semana anterior. $sedeText';
-      }
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AdminTheme.panelBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Resumen ejecutivo',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AdminTheme.textDark,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            summaryText,
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.5,
-              color: AdminTheme.textMuted,
             ),
           ),
         ],

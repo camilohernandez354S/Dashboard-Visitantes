@@ -50,7 +50,7 @@ class DailyTrendPanel extends StatelessWidget {
         builder: (context, constraints) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.max,
             children: [
               Wrap(
                 alignment: WrapAlignment.spaceBetween,
@@ -110,10 +110,7 @@ class DailyTrendPanel extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              SizedBox(
-                height: constraints.maxHeight > 0 
-                    ? constraints.maxHeight - 120 // Restar espacio del header y padding
-                    : 300, // Altura mínima si no hay restricciones
+              Expanded(
                 child: LayoutBuilder(
                   builder: (context, chartConstraints) {
                 return Stack(
@@ -293,19 +290,7 @@ class DailyTrendPanel extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    return Container(
-      height: 220,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AdminTheme.panelBorder),
-      ),
-      alignment: Alignment.center,
-      child: const Text(
-        'Sin datos para mostrar la evolución diaria',
-        style: TextStyle(fontSize: 14, color: AdminTheme.textMuted),
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   static double _calculateInterval(double maxValue) {

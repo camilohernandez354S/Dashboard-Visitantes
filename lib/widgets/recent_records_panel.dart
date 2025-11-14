@@ -471,9 +471,9 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       itemCount: _records.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 14),
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         return _buildRecordItem(_records[index], index);
       },
@@ -501,161 +501,144 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: AdminTheme.panelBorder.withOpacity(0.4),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 6,
               offset: const Offset(0, 2),
               spreadRadius: 0,
             ),
             BoxShadow(
-              color: color.withOpacity(0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-              spreadRadius: -2,
+              color: color.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+              spreadRadius: -1,
             ),
           ],
         ),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Nombre completo (jerarquía principal mejorada)
-            Text(
-              record.nombreCompleto.isNotEmpty
-                  ? record.nombreCompleto
-                  : 'Sin nombre',
-              style: const TextStyle(
-                fontSize: 15.5,
-                fontWeight: FontWeight.w800,
-                color: AdminTheme.textDark,
-                height: 1.35,
-                letterSpacing: -0.2,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            // Cargo (texto secundario mejorado)
-            if (record.cargo.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AdminTheme.textMuted.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.business_rounded,
-                      size: 13,
-                      color: AdminTheme.textMuted.withOpacity(0.8),
+            // Columna principal con nombre y cargo
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Nombre completo (compacto)
+                  Text(
+                    record.nombreCompleto.isNotEmpty
+                        ? record.nombreCompleto
+                        : 'Sin nombre',
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: AdminTheme.textDark,
+                      height: 1.3,
+                      letterSpacing: -0.1,
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      record.cargo,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: AdminTheme.textMuted.withOpacity(0.9),
-                        height: 1.3,
-                        letterSpacing: 0.1,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 14),
-            // Acción y timestamp mejorados
-            Row(
-              children: [
-                // Tag de acción (entrada/salida) mejorado
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        color.withOpacity(0.15),
-                        color.withOpacity(0.10),
+                  // Cargo (compacto, inline)
+                  if (record.cargo.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.business_rounded,
+                          size: 11,
+                          color: AdminTheme.textMuted.withOpacity(0.7),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          record.cargo,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: AdminTheme.textMuted.withOpacity(0.85),
+                            height: 1.2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(
-                      color: color.withOpacity(0.35),
-                      width: 1.2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  ],
+                  const SizedBox(height: 8),
+                  // Tag de acción y timestamp en fila
+                  Row(
                     children: [
-                      Icon(icon, size: 15, color: color),
-                      const SizedBox(width: 7),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: color,
-                          letterSpacing: 0.4,
+                      // Tag de acción (compacto)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              color.withOpacity(0.15),
+                              color.withOpacity(0.10),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                            color: color.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(icon, size: 12, color: color),
+                            const SizedBox(width: 5),
+                            Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: color,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                // Timestamp mejorado
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AdminTheme.textMuted.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.access_time_rounded,
-                        size: 12,
-                        color: AdminTheme.textMuted.withOpacity(0.75),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${timeFormat.format(record.timestamp)} • ${dateFormat.format(record.timestamp)}',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          color: AdminTheme.textMuted.withOpacity(0.85),
-                          letterSpacing: 0.1,
-                        ),
+                      const SizedBox(width: 8),
+                      // Timestamp (compacto)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.access_time_rounded,
+                            size: 10,
+                            color: AdminTheme.textMuted.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${timeFormat.format(record.timestamp)} • ${dateFormat.format(record.timestamp)}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: AdminTheme.textMuted.withOpacity(0.8),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),

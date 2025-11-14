@@ -362,53 +362,6 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
               ),
             ),
           ),
-          // Indicador de actualización automática mejorado
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AdminTheme.successGreen.withOpacity(0.15),
-                  AdminTheme.successGreen.withOpacity(0.08),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: AdminTheme.successGreen.withOpacity(0.25),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: AdminTheme.successGreen,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AdminTheme.successGreen.withOpacity(0.5),
-                        blurRadius: 4,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 7),
-                const Text(
-                  'Auto',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AdminTheme.successGreen,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

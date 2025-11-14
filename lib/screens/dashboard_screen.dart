@@ -256,17 +256,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               actions: [
-                StreamBuilder<SocketStatus>(
-                  stream: _socketStatusStream,
-                  initialData: SocketStatus.connecting,
-                  builder: (context, snapshot) {
-                    final status = snapshot.data ?? SocketStatus.idle;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: _buildSocketStatusPill(status),
-                    );
-                  },
-                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
@@ -288,17 +277,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ],
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Actualizar manualmente',
-                  onPressed: _handleManualRefresh,
-                  icon: const Icon(Icons.refresh_rounded),
-                ),
-                IconButton(
-                  tooltip: 'Modo pantalla completa',
-                  onPressed: _toggleFullscreen,
-                  icon: const Icon(Icons.fullscreen),
-                ),
+                )
               ],
             );
 

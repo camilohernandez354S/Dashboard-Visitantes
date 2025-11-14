@@ -28,11 +28,11 @@ class AppConfig {
   factory AppConfig.fromEnvironment() {
     final String apiBaseRaw = const String.fromEnvironment(
       'API_BASE_URL',
-      defaultValue: 'http://10.139.237.174:8000',
+      defaultValue: 'https://academica.dataguaviare.com.co',
     );
     final String wsBaseRaw = const String.fromEnvironment(
       'WS_URL',
-      defaultValue: 'ws://10.139.237.174:8080',
+      defaultValue: 'wss://academica.dataguaviare.com.co/app',
     );
     final String reverbAppKey = const String.fromEnvironment(
       'REVERB_APP_KEY',
@@ -71,8 +71,8 @@ class AppConfig {
   /// HTTP y WebSocket usan el mismo servidor pero diferentes protocolos.
   static AppConfig fallback() {
     return AppConfig._(
-      apiBaseUrl: Uri.parse('http://10.139.237.174:8000'),
-      wsDashboardUrl: Uri.parse('ws://10.139.237.174:8080'),
+      apiBaseUrl: Uri.parse('https://academica.dataguaviare.com.co'),
+      wsDashboardUrl: Uri.parse('wss://academica.dataguaviare.com.co/app'),
       reverbAppKey: '8c77ba6acf0de58189211e938930fe72',
     );
   }

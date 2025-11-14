@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 /// Niveles básicos para logging interno.
 enum LogLevel { debug, info, warning, error }
 
@@ -20,15 +18,7 @@ class AppLogger {
       _log(LogLevel.error, err != null ? '$message → $err' : message, tag);
 
   static void _log(LogLevel level, String message, String tag) {
-    if (kReleaseMode && level == LogLevel.debug) return;
-
-    final emoji = switch (level) {
-      LogLevel.debug => '🟦',
-      LogLevel.info => '🟢',
-      LogLevel.warning => '🟠',
-      LogLevel.error => '🔴',
-    };
-
-    debugPrint('$emoji [$tag] $message');
+    // Logs deshabilitados para mantener la consola limpia
+    return;
   }
 }

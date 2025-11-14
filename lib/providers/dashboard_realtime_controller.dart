@@ -48,6 +48,7 @@ class DashboardRealtimeController {
 
   Stream<DashboardData> get stream => _streamController.stream;
   Stream<SocketStatus> get socketStatus => _statusController.stream;
+  SocketService get socketService => _socketService;
 
   DashboardData? get latest => _latest;
   AppConfig get config => _config;

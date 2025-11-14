@@ -26,15 +26,11 @@ class FichaService {
   /// Obtiene todas las fichas del backend o datos mock si no hay API.
   Future<List<Ficha>> fetchFichas() async {
     if (_baseUri == null) {
-      // ignore: avoid_print
-      print('📦 [FichaService] API_BASE_URL vacío → usando fichas MOCK');
       await Future.delayed(const Duration(milliseconds: 250));
       return _mockFichas();
     }
 
     final uri = _baseUri!;
-    // ignore: avoid_print
-    print('🌐 [FichaService] Consultando fichas: $uri');
 
     final response = await http
         .get(uri, headers: {'Accept': 'application/json'})
@@ -72,8 +68,6 @@ class FichaService {
     }
 
     final uri = base.resolve('$fichaId');
-    // ignore: avoid_print
-    print('🌐 [FichaService] Consultando ficha $fichaId: $uri');
 
     final response = await http
         .get(uri, headers: {'Accept': 'application/json'})

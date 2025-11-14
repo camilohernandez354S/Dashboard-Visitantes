@@ -10,6 +10,7 @@ import '../services/socket_service.dart';
 import '../theme/admin_theme.dart';
 import '../widgets/daily_trend_panel.dart';
 import '../widgets/hourly_entries_chart.dart';
+import '../widgets/recent_records_panel.dart';
 import '../widgets/stat_card.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -82,18 +83,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
-      // ignore: avoid_print
-      print('🔄 [DashboardScreen] Iniciando carga de datos desde API...');
       final result = await _realtimeController.loadInitialData();
       if (!mounted) return;
-
-      // ignore: avoid_print
-      print(
-        '✅ [DashboardScreen] Datos recibidos - '
-        'Instructores: ${result.instructores}, '
-        'Aprendices: ${result.aprendices}, '
-        'Total registros: ${result.records.length}',
-      );
 
       setState(() {
         _initialData = result;
@@ -102,15 +93,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _loading = false;
         _errorMessage = null;
       });
-
-      // ignore: avoid_print
-      print('✅ [DashboardScreen] Estado actualizado en la UI');
-    } catch (e, stackTrace) {
+    } catch (e) {
       if (!mounted) return;
-      // ignore: avoid_print
-      print('❌ [DashboardScreen] Error al cargar datos: $e');
-      // ignore: avoid_print
-      print('Stack trace: $stackTrace');
       setState(() {
         _errorMessage = e.toString();
         _loading = false;
@@ -132,23 +116,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (newData) {
         if (!mounted) return;
 
-        // ignore: avoid_print
-        print(
-          '🔄 Actualización recibida del stream - '
-          'Instructores: ${newData.instructores}, '
-          'Aprendices: ${newData.aprendices}, '
-          'Total registros: ${newData.records.length}',
-        );
-
         // Actualizar estado cuando lleguen nuevos datos
         setState(() {
-          // Comparar valores anteriores y nuevos para detectar cambios
-          final previousInstructores = _latestData?.instructores ?? 0;
-          final previousAprendices = _latestData?.aprendices ?? 0;
-          final previousFuncionarios = _latestData?.funcionarios ?? 0;
-          final previousVisitantes = _latestData?.visitantes ?? 0;
-          final previousAsistenciasHoy = _latestData?.asistenciasHoy ?? 0;
-
           _latestData = newData;
           _lastRefresh = DateTime.now();
 
@@ -160,23 +129,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Limpiar error si había uno
           _errorMessage = null;
           _loading = false;
-
-          // Log de actualización con los valores de las tarjetas principales
-          // ignore: avoid_print
-          print(
-            '✅ UI actualizada - '
-            'Instructores: $previousInstructores → ${newData.instructores}, '
-            'Aprendices: $previousAprendices → ${newData.aprendices}, '
-            'Funcionarios: $previousFuncionarios → ${newData.funcionarios}, '
-            'Visitantes: $previousVisitantes → ${newData.visitantes}, '
-            'Asistencias hoy: $previousAsistenciasHoy → ${newData.asistenciasHoy}',
-          );
         });
       },
       onError: (error) {
         if (!mounted) return;
-        // ignore: avoid_print
-        print('❌ Error en stream de datos en tiempo real: $error');
         // No establecer error aquí para no bloquear la UI
         // El error solo se muestra si falla la carga inicial
       },
@@ -359,71 +315,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
             18.0,
             32.0,
           );
-          final availableWidth = constraints.maxWidth - (horizontalPadding * 2);
+          final panelWidth = 380.0;
+          // Calcular ancho disponible considerando el panel lateral
+          final availableWidth = (constraints.maxWidth - (horizontalPadding * 2) - panelWidth).clamp(400.0, double.infinity);
 
-          return Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: horizontalPadding,
-              vertical: verticalPadding,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Text(
-                          'Monitoreo en tiempo real de asistencia por sede — Centro Agroindustrial del Guaviare',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AdminTheme.textMuted,
-                          ),
-                        ),
-                        if (_isFullscreen) ...[
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.topRight,
-                            child: FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AdminTheme.appBar,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: horizontalPadding,
+                    right: 0,
+                    top: verticalPadding,
+                    bottom: verticalPadding,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                'Monitoreo en tiempo real de asistencia por sede — Centro Agroindustrial del Guaviare',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: AdminTheme.textMuted,
                                 ),
                               ),
-                              onPressed: _toggleFullscreen,
-                              icon: const Icon(Icons.fullscreen_exit_rounded),
-                              label: const Text('Salir de pantalla completa'),
-                            ),
+                              if (_isFullscreen) ...[
+                                const SizedBox(height: 12),
+                                Align(
+                                  alignment: Alignment.topRight,
+                                  child: FilledButton.icon(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: AdminTheme.appBar,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                      ),
+                                    ),
+                                    onPressed: _toggleFullscreen,
+                                    icon: const Icon(Icons.fullscreen_exit_rounded),
+                                    label: const Text('Salir de pantalla completa'),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 12),
+                              _buildMetricCards(
+                                availableWidth,
+                                baselineData,
+                                _lastRefresh != null
+                                    ? 'Última actualización: ${DateFormat('HH:mm:ss').format(_lastRefresh!)}'
+                                    : null,
+                              ),
+                              const SizedBox(height: 16),
+                              _buildStatisticsPanel(baselineData, availableWidth),
+                              const SizedBox(height: 16),
+                              const HourlyEntriesChart(),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                height: MediaQuery.of(context).size.height * 0.25,
+                                child: DailyTrendPanel(data: baselineData.hourly),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
                           ),
-                        ],
-                        const SizedBox(height: 12),
-                        _buildMetricCards(
-                          availableWidth,
-                          baselineData,
-                          _lastRefresh != null
-                              ? 'Última actualización: ${DateFormat('HH:mm:ss').format(_lastRefresh!)}'
-                              : null,
                         ),
-                        const SizedBox(height: 16),
-                        _buildStatisticsPanel(baselineData, availableWidth),
-                        const SizedBox(height: 16),
-                        const HourlyEntriesChart(),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.25,
-                          child: DailyTrendPanel(data: baselineData.hourly),
-                        ),
-                        const SizedBox(height: 14),
-                      ],
-                    ),
+                      ),
+                      _buildFooter(),
+                    ],
                   ),
                 ),
-                _buildFooter(),
-              ],
-            ),
+              ),
+              RecentRecordsPanel(
+                updateStream: _realtimeController.stream,
+                initialData: baselineData,
+                socketStream: _realtimeController.socketService.stream,
+              ),
+            ],
           );
         },
       ),

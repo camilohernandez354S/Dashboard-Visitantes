@@ -86,16 +86,6 @@ class ApiService {
             personasDentroData: personasDentro,
           );
 
-          // ignore: avoid_print
-          print(
-            '✅ [ApiService] Estadísticas cargadas desde endpoint - '
-            'Instructores: $instructores, '
-            'Aprendices: $aprendices, '
-            'Funcionarios: $funcionarios, '
-            'Visitantes: $visitantes, '
-            'Asistencias hoy: $asistenciasHoy',
-          );
-
           return data;
         }
 
@@ -119,8 +109,6 @@ class ApiService {
     } on TimeoutException {
       rethrow;
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ [ApiService] Error inesperado: $e');
       rethrow;
     }
   }
@@ -149,10 +137,6 @@ class ApiService {
               return data.whereType<Map<String, dynamic>>().toList();
             } else if (data is Map) {
               // Error: el endpoint está retornando estadísticas en lugar de visitantes
-              // ignore: avoid_print
-              print(
-                '❌ [ApiService] ERROR: El endpoint /visitantes-actuales está retornando estadísticas (Map) en lugar de una lista de visitantes. Verifica la ruta en el backend.',
-              );
               return [];
             }
           } else if (decoded.containsKey('data')) {
@@ -160,10 +144,6 @@ class ApiService {
             if (data is List) {
               return data.whereType<Map<String, dynamic>>().toList();
             } else if (data is Map) {
-              // ignore: avoid_print
-              print(
-                '❌ [ApiService] ERROR: El endpoint /visitantes-actuales está retornando estadísticas (Map) en lugar de una lista de visitantes.',
-              );
               return [];
             }
           }
@@ -185,8 +165,6 @@ class ApiService {
         throw Exception('Error HTTP ${resp.statusCode}: $message');
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ [ApiService] Error al obtener visitantes actuales: $e');
       rethrow;
     }
   }
@@ -242,8 +220,6 @@ class ApiService {
         throw Exception('Error HTTP ${response.statusCode}: $message');
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ [ApiService] Error al registrar entrada: $e');
       rethrow;
     }
   }
@@ -295,8 +271,92 @@ class ApiService {
         throw Exception('Error HTTP ${response.statusCode}: $message');
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ [ApiService] Error al registrar salida: $e');
+      rethrow;
+    }
+  }
+
+  /// Obtiene los registros diarios desde el endpoint.
+  /// Endpoint: GET /api/presencia/registros-diarios
+  static Future<List<DailyRecord>> fetchRegistrosDiarios() async {
+    try {
+      final uri = Uri.parse('$apiBase/api/presencia/registros-diarios');
+
+      final resp = await http
+          .get(uri, headers: {'Accept': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+
+      if (resp.statusCode == 200) {
+        final dynamic decoded = jsonDecode(resp.body);
+
+        // Manejar formato de respuesta Laravel: {success: true, data: {registros: [...]}}
+        dynamic responseData = decoded;
+        if (decoded is Map<String, dynamic>) {
+          if (decoded.containsKey('success') && decoded.containsKey('data')) {
+            responseData = decoded['data'];
+          } else if (decoded.containsKey('data')) {
+            responseData = decoded['data'];
+          }
+        }
+
+        // Extraer el array de registros desde data.registros
+        List<dynamic> registrosList = [];
+        if (responseData is Map<String, dynamic>) {
+          if (responseData.containsKey('registros') &&
+              responseData['registros'] is List) {
+            registrosList = responseData['registros'] as List;
+          }
+        } else if (responseData is List) {
+          // Si data es directamente un array (formato alternativo)
+          registrosList = responseData;
+        }
+
+        if (registrosList.isNotEmpty) {
+          return registrosList
+              .whereType<Map<String, dynamic>>()
+              .map((json) {
+                try {
+                  // Agregar la fecha y sede_id al json para que DailyRecord pueda usarlos
+                  if (responseData is Map<String, dynamic>) {
+                    final fecha = responseData['fecha']?.toString();
+                    if (fecha != null && !json.containsKey('fecha')) {
+                      json['fecha'] = fecha;
+                    }
+                  }
+                  return DailyRecord.fromJson(json);
+                } catch (e) {
+                  return null;
+                }
+              })
+              .whereType<DailyRecord>()
+              .toList();
+        }
+
+        return [];
+      } else if (resp.statusCode == 404) {
+        // Endpoint no encontrado, retornar lista vacía sin error
+        return [];
+      } else {
+        final dynamic decoded = jsonDecode(resp.body);
+        final message =
+            decoded is Map<String, dynamic>
+                ? (decoded['message'] ?? 'Error al obtener registros diarios')
+                : 'Error al obtener registros diarios';
+        throw Exception('Error HTTP ${resp.statusCode}: $message');
+      }
+    } on TimeoutException {
+      // Timeout: retornar lista vacía sin lanzar error
+      return [];
+    } catch (e) {
+      // Para errores de conexión, retornar lista vacía en lugar de lanzar excepción
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('timeout') ||
+          errorStr.contains('connection') ||
+          errorStr.contains('failed host lookup') ||
+          errorStr.contains('network') ||
+          errorStr.contains('socket')) {
+        return [];
+      }
+      // Para otros errores, lanzar excepción
       rethrow;
     }
   }
@@ -354,10 +414,125 @@ class ApiService {
         throw Exception('Error HTTP ${resp.statusCode}: ${resp.body}');
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ [ApiService] Error al obtener entradas por hora: $e');
       rethrow;
     }
+  }
+}
+
+/// Modelo para un registro diario de asistencia.
+class DailyRecord {
+  final String nombre;
+  final String apellido;
+  final String cargo;
+  final String tipo; // 'entrada' o 'salida'
+  final DateTime timestamp;
+
+  const DailyRecord({
+    required this.nombre,
+    required this.apellido,
+    required this.cargo,
+    required this.tipo,
+    required this.timestamp,
+  });
+
+  String get nombreCompleto => '$nombre $apellido'.trim();
+
+  bool get esEntrada => tipo.toLowerCase() == 'entrada';
+  bool get esSalida => tipo.toLowerCase() == 'salida';
+
+  factory DailyRecord.fromJson(Map<String, dynamic> json) {
+    final nombre = (json['nombre'] ?? json['nombres'] ?? '').toString().trim();
+    final apellido =
+        (json['apellido'] ?? json['apellidos'] ?? '').toString().trim();
+
+    // El cargo puede venir de 'sede' o de otros campos
+    final cargo =
+        (json['cargo'] ??
+                json['sede'] ??
+                json['rol'] ??
+                json['tipo_persona'] ??
+                json['role'] ??
+                '')
+            .toString()
+            .trim();
+
+    // Determinar tipo desde hora_entrada y hora_salida
+    // Si hora_salida tiene valor, el último evento fue una salida
+    // Si solo hay hora_entrada, el último evento fue una entrada
+    String tipo = 'entrada';
+    final horaSalida = json['hora_salida'];
+    final horaEntrada = json['hora_entrada'];
+
+    if (horaSalida != null && horaSalida.toString().trim().isNotEmpty) {
+      // Si hay hora_salida, el último evento fue una salida
+      tipo = 'salida';
+    } else if (horaEntrada != null &&
+        horaEntrada.toString().trim().isNotEmpty) {
+      // Si solo hay hora_entrada, el último evento fue una entrada
+      tipo = 'entrada';
+    } else if (json.containsKey('tipo')) {
+      tipo =
+          (json['tipo'] ?? json['tipo_registro'] ?? 'entrada')
+              .toString()
+              .toLowerCase();
+    }
+
+    // Construir timestamp desde fecha + hora_entrada o hora_salida
+    DateTime timestamp = DateTime.now();
+    final fecha = json['fecha']?.toString();
+
+    if (fecha != null) {
+      // Intentar construir desde fecha + hora
+      String horaStr = '';
+      if (tipo == 'salida' && horaSalida != null) {
+        horaStr = horaSalida.toString().trim();
+      } else if (horaEntrada != null) {
+        horaStr = horaEntrada.toString().trim();
+      }
+
+      if (horaStr.isNotEmpty) {
+        // Formato esperado: "2025-11-14" + "04:51:38" = "2025-11-14 04:51:38"
+        final fechaHoraStr = '$fecha $horaStr';
+        final parsed = DateTime.tryParse(fechaHoraStr);
+        if (parsed != null) {
+          timestamp = parsed;
+        }
+      } else {
+        // Solo fecha sin hora
+        final parsed = DateTime.tryParse(fecha);
+        if (parsed != null) {
+          timestamp = parsed;
+        }
+      }
+    } else {
+      // Fallback a otros campos de timestamp
+      if (json.containsKey('timestamp')) {
+        final ts = json['timestamp'];
+        if (ts is String) {
+          timestamp = DateTime.tryParse(ts) ?? DateTime.now();
+        } else if (ts is int) {
+          timestamp = DateTime.fromMillisecondsSinceEpoch(ts);
+        }
+      } else if (json.containsKey('created_at')) {
+        final ts = json['created_at'];
+        if (ts is String) {
+          timestamp = DateTime.tryParse(ts) ?? DateTime.now();
+        }
+      } else if (json.containsKey('fecha_hora')) {
+        final ts = json['fecha_hora'];
+        if (ts is String) {
+          timestamp = DateTime.tryParse(ts) ?? DateTime.now();
+        }
+      }
+    }
+
+    return DailyRecord(
+      nombre: nombre,
+      apellido: apellido,
+      cargo: cargo,
+      tipo: tipo,
+      timestamp: timestamp,
+    );
   }
 }
 
@@ -699,36 +874,15 @@ class DashboardData {
   Map<String, int> getBreakdownBySede(AttendanceRole role) {
     final sedeCounts = <String, int>{};
 
-    // Debug: imprimir información de los registros
-    // ignore: avoid_print
-    print(
-      '🔍 [getBreakdownBySede] Calculando breakdown para rol: ${role.label}',
-    );
-    // ignore: avoid_print
-    print('🔍 [getBreakdownBySede] Total registros: ${records.length}');
-
     for (final record in records) {
       if (record.role == role) {
         final sede = record.sede ?? 'Sin sede';
         sedeCounts[sede] = (sedeCounts[sede] ?? 0) + 1;
-        // Debug: imprimir cada registro que coincide
-        // ignore: avoid_print
-        print(
-          '  ✓ Registro: ${record.name} - Sede: "$sede" (original: ${record.sede})',
-        );
       }
     }
 
-    // Debug: imprimir resultado
-    // ignore: avoid_print
-    print('📊 [getBreakdownBySede] Breakdown para ${role.label}: $sedeCounts');
-
     // Si no hay registros, retornar mapa vacío
     if (sedeCounts.isEmpty) {
-      // ignore: avoid_print
-      print(
-        '⚠️ [getBreakdownBySede] No se encontraron registros para ${role.label}',
-      );
       return {};
     }
 
@@ -1206,8 +1360,6 @@ class AttendanceRecord {
       final now = DateTime.now();
       return DateTime(now.year, now.month, now.day, hour, minute, second);
     } catch (e) {
-      // ignore: avoid_print
-      print('⚠️ [AttendanceRecord] Error al parsear hora: $horaStr - $e');
       return null;
     }
   }

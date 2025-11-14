@@ -33,10 +33,6 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Debug: imprimir breakdown recibido
-    // ignore: avoid_print
-    print('🎨 [StatCard] ${title} - Breakdown: $_breakdown (isEmpty: ${_breakdown.isEmpty})');
-    
     // El porcentaje siempre es positivo (es un porcentaje del total)
     final Color variationColor = const Color(0xFF6C757D);
 

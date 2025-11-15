@@ -11,7 +11,7 @@ enum SocketStatus { idle, connecting, connected, reconnecting, disconnected }
 /// Por defecto usa ws://localhost:8080 (puerto 8080)
 const String defaultSocketUrl = String.fromEnvironment(
   'WS_URL',
-  defaultValue: 'ws://localhost:8080',
+  defaultValue: 'ws://192.168.101.82:8080',
 );
 
 /// Servicio encargado de gestionar la conexión WebSocket del dashboard.
@@ -38,7 +38,7 @@ class SocketService {
   /// Normaliza la URL de WebSocket, convirtiendo http:// a ws:// y https:// a wss://
   static String _normalizeWebSocketUrl(String url) {
     if (url.isEmpty) {
-      return 'ws://localhost:8080';
+      return 'ws://192.168.101.82:8080';
     }
 
     String normalized = url.trim();

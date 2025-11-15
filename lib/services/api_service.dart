@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 /// URL base de la API configurada via --dart-define
 const String apiBase = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://academica.dataguaviare.com.co',
+  defaultValue: 'http://192.168.101.82:8000',
 );
 
 class ApiService {

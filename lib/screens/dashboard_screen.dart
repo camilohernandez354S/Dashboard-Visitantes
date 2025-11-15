@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 
 import '../providers/dashboard_realtime_controller.dart';
 import '../services/api_service.dart' show DashboardData, AttendanceRole;
-import '../services/socket_service.dart';
 import '../theme/admin_theme.dart';
 import '../widgets/daily_trend_panel.dart';
 import '../widgets/hourly_entries_chart.dart';
@@ -22,7 +21,6 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late final DashboardRealtimeController _realtimeController;
-  late final Stream<SocketStatus> _socketStatusStream;
 
   DashboardData? _initialData;
   DashboardData? _latestData;
@@ -105,7 +103,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _setupRealtimeStreams() {
     // Iniciar conexión WebSocket
     _realtimeController.startRealtime();
-    _socketStatusStream = _realtimeController.socketStatus;
 
     // ═══════════════════════════════════════════════════════════
     // SUSCRIBIRSE AL STREAM DE DATOS EN TIEMPO REAL
@@ -139,10 +136,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Future<void> _handleManualRefresh() async {
-    await _realtimeController.manualRefresh();
-  }
-
   void _toggleFullscreen() {
     setState(() => _isFullscreen = !_isFullscreen);
     if (_isFullscreen) {
@@ -169,17 +162,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return Scaffold(
         backgroundColor: AdminTheme.background,
         body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              CircularProgressIndicator(color: AdminTheme.primaryBlue),
-              SizedBox(height: 16),
-              Text(
-                'Cargando dashboard...',
-                style: TextStyle(fontSize: 16, color: AdminTheme.textMuted),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(color: AdminTheme.bondiBlue),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Cargando información...',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AdminTheme.textDark,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Por favor espere un momento',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AdminTheme.textMuted,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
         ),
       );
     }
@@ -193,22 +196,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.error_outline_rounded,
-                  size: 72,
-                  color: Colors.redAccent,
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.error_outline_rounded,
+                    size: 64,
+                    color: Colors.redAccent,
+                  ),
                 ),
-                const SizedBox(height: 16),
-                const Text(
+                const SizedBox(height: 24),
+                Text(
                   'No se pudo cargar la información',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AdminTheme.textDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Text(
                   _errorMessage!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AdminTheme.textMuted,
                   ),
                 ),
@@ -218,7 +231,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   icon: const Icon(Icons.refresh_rounded),
                   label: const Text('Reintentar'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AdminTheme.primaryBlue,
+                    backgroundColor: AdminTheme.bondiBlue,
                   ),
                 ),
               ],
@@ -252,7 +265,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  const Text('Dashboard de Visitantes SENA'),
+                  const Text('Control de Ingreso y Salida'),
                 ],
               ),
               actions: [
@@ -294,7 +307,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             18.0,
             32.0,
           );
-          final panelWidth = 380.0;
+          final panelWidth = 400.0;
           // Calcular ancho disponible considerando el panel lateral
           final availableWidth = (constraints.maxWidth - (horizontalPadding * 2) - panelWidth).clamp(400.0, double.infinity);
 
@@ -317,13 +330,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Text(
-                                'Monitoreo en tiempo real de asistencia por sede — Centro Agroindustrial del Guaviare',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: AdminTheme.textMuted,
-                                ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Sistema de Control de Ingreso y Salida',
+                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      color: AdminTheme.textDark,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Monitoreo en tiempo real de personas que ingresan y salen del Centro Agroindustrial del Guaviare',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: AdminTheme.textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline_rounded,
+                                        size: 16,
+                                        color: AdminTheme.bondiBlue,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Este sistema registra automáticamente cada entrada y salida de personas',
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: AdminTheme.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
                               if (_isFullscreen) ...[
                                 const SizedBox(height: 12),
@@ -331,9 +372,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   alignment: Alignment.topRight,
                                   child: FilledButton.icon(
                                     style: FilledButton.styleFrom(
-                                      backgroundColor: AdminTheme.appBar,
+                                      backgroundColor: AdminTheme.bondiBlue,
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
+                                        horizontal: 16,
+                                        vertical: 12,
                                       ),
                                     ),
                                     onPressed: _toggleFullscreen,
@@ -382,11 +424,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return DecoratedBox(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFF8FAFC), Color(0xFFF2F5F9)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
+        color: AdminTheme.background,
       ),
       child: scaffold,
     );
@@ -417,7 +455,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'Instructor',
         data.instructores,
         Icons.person_3_rounded,
-        AdminTheme.primaryBlue,
+        AdminTheme.regalBlue,  // Azul profundo para instructores
         percentageOfTotal(data.instructores),
         data.getBreakdownBySede(AttendanceRole.instructor),
         data.getWeeklyTrend(AttendanceRole.instructor),
@@ -426,7 +464,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'Aprendiz',
         data.aprendices,
         Icons.school_rounded,
-        AdminTheme.successGreen,
+        AdminTheme.bondiBlue,  // Azul vibrante para aprendices
         percentageOfTotal(data.aprendices),
         data.getBreakdownBySede(AttendanceRole.aprendiz),
         data.getWeeklyTrend(AttendanceRole.aprendiz),
@@ -435,7 +473,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'Funcionario',
         data.funcionarios,
         Icons.badge_rounded,
-        AdminTheme.warningAmber,
+        AdminTheme.warningAmber,  // Naranja para funcionarios
         percentageOfTotal(data.funcionarios),
         data.getBreakdownBySede(AttendanceRole.funcionario),
         data.getWeeklyTrend(AttendanceRole.funcionario),
@@ -444,7 +482,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'Visitante',
         data.visitantes,
         Icons.directions_walk_rounded,
-        AdminTheme.infoTeal,
+        AdminTheme.successGreen,  // Verde para visitantes
         percentageOfTotal(data.visitantes),
         data.getBreakdownBySede(AttendanceRole.visitante),
         data.getWeeklyTrend(AttendanceRole.visitante),
@@ -502,47 +540,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
     statisticsWidgets.add(
       Container(
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AdminTheme.panelBorder),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
+          color: AdminTheme.cardBackground,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AdminTheme.panelBorder.withOpacity(0.5), width: 1),
+          boxShadow: AdminTheme.cardShadow,
         ),
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Estadísticas del día',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AdminTheme.textDark,
-              ),
+            Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_rounded,
+                  size: 20,
+                  color: AdminTheme.bondiBlue,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Resumen del día de hoy',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: AdminTheme.textDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Total de ingresos y personas actualmente dentro',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AdminTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
                   child: _buildStatItem(
-                    'Asistencias hoy',
+                    'Ingresos registrados hoy',
                     data.asistenciasHoy,
-                    Icons.event_available_rounded,
-                    AdminTheme.primaryBlue,
+                    Icons.login_rounded,
+                    AdminTheme.bondiBlue,  // Azul vibrante para asistencias
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: _buildStatItem(
-                    'Personas dentro',
+                    'Personas actualmente dentro',
                     totalPersonasDentro,
                     Icons.people_rounded,
-                    AdminTheme.successGreen,
+                    AdminTheme.successGreen,  // Verde para personas dentro
                   ),
                 ),
               ],
@@ -573,9 +628,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.2), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -612,62 +667,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Align(
       alignment: Alignment.center,
       child: Text(
-        '© ${DateTime.now().year} SENA - Dashboard de Visitantes',
-        style: const TextStyle(
-          fontSize: 12,
+        '© ${DateTime.now().year} SENA - Sistema de Control de Ingreso y Salida',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
           color: AdminTheme.textMuted,
           fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSocketStatusPill(SocketStatus status) {
-    final (Color color, String label) = switch (status) {
-      SocketStatus.connected => (const Color(0xFF20C26D), 'En línea'),
-      SocketStatus.connecting => (Colors.amber, 'Conectando'),
-      SocketStatus.reconnecting => (const Color(0xFFE83E8C), 'Reintentando'),
-      SocketStatus.disconnected => (const Color(0xFFD64545), 'Sin conexión'),
-      SocketStatus.idle => (const Color(0xFF9E9E9E), 'Inactivo'),
-    };
-
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 350),
-      transitionBuilder:
-          (child, animation) => ScaleTransition(
-            scale: CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutBack,
-            ),
-            child: FadeTransition(opacity: animation, child: child),
-          ),
-      child: Container(
-        key: ValueKey(label),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.18),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white54),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-          ],
         ),
       ),
     );

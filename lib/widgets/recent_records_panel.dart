@@ -285,19 +285,12 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 380,
+      width: 400,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AdminTheme.cardBackground,
         border: Border(
-          left: BorderSide(color: AdminTheme.panelBorder, width: 1),
+          left: BorderSide(color: AdminTheme.panelBorder.withOpacity(0.5), width: 1),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(-2, 0),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -308,16 +301,8 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AdminTheme.background,
-            AdminTheme.background.withOpacity(0.95),
-          ],
-        ),
         border: Border(
           bottom: BorderSide(
             color: AdminTheme.panelBorder.withOpacity(0.5),
@@ -327,39 +312,32 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AdminTheme.primaryBlue.withOpacity(0.15),
-                  AdminTheme.primaryBlue.withOpacity(0.08),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: AdminTheme.primaryBlue.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-            child: const Icon(
-              Icons.history_rounded,
-              color: AdminTheme.primaryBlue,
-              size: 22,
-            ),
+          Icon(
+            Icons.history_rounded,
+            color: AdminTheme.bondiBlue,
+            size: 24,
           ),
-          const SizedBox(width: 14),
-          const Expanded(
-            child: Text(
-              'Últimos registros',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: AdminTheme.textDark,
-                letterSpacing: -0.3,
-              ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Registros de Ingreso y Salida',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AdminTheme.textDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Últimas personas que han ingresado o salido',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AdminTheme.textMuted,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -372,7 +350,7 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32),
-          child: CircularProgressIndicator(color: AdminTheme.primaryBlue),
+          child: CircularProgressIndicator(color: AdminTheme.bondiBlue),
         ),
       );
     }
@@ -391,8 +369,17 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Error al cargar registros',
-                style: TextStyle(fontSize: 14, color: AdminTheme.textMuted),
+                'No se pudieron cargar los registros',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AdminTheme.textMuted,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Intente recargar la página',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AdminTheme.textMuted.withOpacity(0.7),
+                ),
               ),
             ],
           ),
@@ -414,8 +401,18 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
               ),
               const SizedBox(height: 16),
               Text(
-                'No hay registros',
-                style: TextStyle(fontSize: 14, color: AdminTheme.textMuted),
+                'No hay registros aún',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AdminTheme.textMuted,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Los registros aparecerán aquí cuando haya actividad',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AdminTheme.textMuted.withOpacity(0.7),
+                ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -424,9 +421,9 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       itemCount: _records.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         return _buildRecordItem(_records[index], index);
       },
@@ -454,26 +451,25 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          color: AdminTheme.cardBackground,
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: AdminTheme.panelBorder.withOpacity(0.4),
-            width: 1,
+            color: color.withOpacity(0.25),
+            width: 1.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-              spreadRadius: 0,
+              color: color.withOpacity(0.12),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+              spreadRadius: -2,
             ),
             BoxShadow(
-              color: color.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-              spreadRadius: -1,
+              color: AdminTheme.shadowLight,
+              blurRadius: 6,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
@@ -491,12 +487,10 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
                     record.nombreCompleto.isNotEmpty
                         ? record.nombreCompleto
                         : 'Sin nombre',
-                    style: const TextStyle(
-                      fontSize: 13.5,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: AdminTheme.textDark,
                       height: 1.3,
-                      letterSpacing: -0.1,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -534,34 +528,41 @@ class _RecentRecordsPanelState extends State<RecentRecordsPanel> {
                       // Tag de acción (compacto)
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                          horizontal: 10,
+                          vertical: 6,
                         ),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
+                              color.withOpacity(0.2),
                               color.withOpacity(0.15),
-                              color.withOpacity(0.10),
                             ],
                           ),
-                          borderRadius: BorderRadius.circular(7),
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: color.withOpacity(0.3),
-                            width: 1,
+                            color: color.withOpacity(0.4),
+                            width: 1.5,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withOpacity(0.15),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(icon, size: 12, color: color),
-                            const SizedBox(width: 5),
+                            Icon(icon, size: 14, color: color),
+                            const SizedBox(width: 6),
                             Text(
                               label,
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: color,
-                                letterSpacing: 0.3,
+                                letterSpacing: 0.4,
                               ),
                             ),
                           ],

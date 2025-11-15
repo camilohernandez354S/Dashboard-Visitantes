@@ -5,9 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../theme/admin_theme.dart';
-import '../utils/color_utils.dart';
 
-/// Tarjeta estadística inspirada en AdminLTE.
+/// Tarjeta estadística moderna con diseño vibrante y profesional.
 class StatCard extends StatelessWidget {
   const StatCard({
     super.key,
@@ -33,25 +32,19 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // El porcentaje siempre es positivo (es un porcentaje del total)
-    final Color variationColor = const Color(0xFF6C757D);
-
     final formattedValue = NumberFormat.decimalPattern().format(value);
 
     final card = Container(
-      constraints: const BoxConstraints(minHeight: 160, maxHeight: 188),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      constraints: const BoxConstraints(minHeight: 160, maxHeight: 180),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-        border: Border.all(color: color.withOpacity(0.12), width: 1),
+        color: AdminTheme.cardBackground,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AdminTheme.panelBorder.withOpacity(0.5),
+          width: 1,
+        ),
+        boxShadow: AdminTheme.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -60,67 +53,85 @@ class StatCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 50,
-                height: 50,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
                   shape: BoxShape.circle,
-                  color: color.withOpacity(0.18),
                 ),
-                child: Icon(icon, size: 26, color: color.darken(0.1)),
+                child: Icon(
+                  icon,
+                  size: 24,
+                  color: color,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: Text(
-                  title.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.6,
-                    color: Color(0xFF6C757D),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                            color: AdminTheme.textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _getDescriptionForTitle(title),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: AdminTheme.textMuted.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
                 formattedValue,
                 style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w700,
-                  color: color.darken(0.15),
+                  fontSize: 36,
+                  fontWeight: FontWeight.w800,
+                  color: color,
                   height: 1,
+                  letterSpacing: -1,
                 ),
               ),
               const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: variationColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${variation.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: variationColor,
-                  ),
+              Text(
+                '${variation.toStringAsFixed(1)}%',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AdminTheme.textMuted,
                 ),
               ),
               if (_trend.isNotEmpty && _trend.any((v) => v > 0)) ...[
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 Expanded(
                   child: SizedBox(
-                    height: 40,
+                    height: 44,
                     child: LineChart(
                       LineChartData(
                         minY: 0,
@@ -142,15 +153,15 @@ class StatCard extends StatelessWidget {
                                     )
                                     .toList(),
                             isCurved: true,
-                            barWidth: 2,
-                            color: color.darken(0.05),
+                            barWidth: 3,
+                            color: color,
                             dotData: const FlDotData(show: false),
                             belowBarData: BarAreaData(
                               show: true,
                               gradient: LinearGradient(
                                 colors: [
-                                  color.withOpacity(0.18),
-                                  color.withOpacity(0.04),
+                                  color.withOpacity(0.25),
+                                  color.withOpacity(0.08),
                                 ],
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
@@ -165,15 +176,17 @@ class StatCard extends StatelessWidget {
               ],
             ],
           ),
-          if (_breakdown.isNotEmpty)
+          if (_breakdown.isNotEmpty) ...[
+            const SizedBox(height: 16),
             Wrap(
-              spacing: 6,
-              runSpacing: 4,
+              spacing: 8,
+              runSpacing: 6,
               children:
                   _breakdown.entries
                       .map((entry) => _buildSubSedeChip(entry.key, entry.value))
                       .toList(),
             ),
+          ],
         ],
       ),
     );
@@ -187,26 +200,51 @@ class StatCard extends StatelessWidget {
   Widget _buildSubSedeChip(String label, int value) {
     final Color chipColor = _colorForLabel(label, base: color);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: chipColor.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: chipColor.withOpacity(0.2), width: 1),
+        gradient: LinearGradient(
+          colors: [
+            chipColor.withOpacity(0.18),
+            chipColor.withOpacity(0.12),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: chipColor.withOpacity(0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: chipColor.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: chipColor, shape: BoxShape.circle),
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: chipColor,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: chipColor.withOpacity(0.5),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           Text(
             '$label: $value',
             style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
               color: AdminTheme.textDark,
             ),
           ),
@@ -218,14 +256,29 @@ class StatCard extends StatelessWidget {
   Color _colorForLabel(String label, {required Color base}) {
     switch (label.toLowerCase()) {
       case 'modelo':
-        return const Color(0xFF28A745);
+        return AdminTheme.successGreen;
       case 'centro':
-        return const Color(0xFF007BFF);
+        return AdminTheme.bondiBlue;
       case 'km 11':
       case 'km11':
-        return const Color(0xFFF39C12);
+        return AdminTheme.warningAmber;
       default:
         return base;
+    }
+  }
+
+  String _getDescriptionForTitle(String title) {
+    switch (title.toLowerCase()) {
+      case 'instructor':
+        return 'Personal docente que ha ingresado';
+      case 'aprendiz':
+        return 'Estudiantes que han ingresado';
+      case 'funcionario':
+        return 'Personal administrativo que ha ingresado';
+      case 'visitante':
+        return 'Visitantes que han ingresado';
+      default:
+        return 'Registros de ingreso del día';
     }
   }
 }

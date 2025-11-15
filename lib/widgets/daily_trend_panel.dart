@@ -20,7 +20,6 @@ class DailyTrendPanel extends StatelessWidget {
     final values = data.map((e) => e.value).toList(growable: false);
     final labels = data.map((e) => e.hour).toList(growable: false);
     final maxValueInData = values.isEmpty ? 0 : values.reduce(max);
-    // Si todos los valores son 0, usar un máximo mínimo para mostrar el gráfico
     final maxValue = maxValueInData == 0 
         ? 10 
         : max(10, (maxValueInData * 1.25).round());
@@ -30,22 +29,12 @@ class DailyTrendPanel extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF6FBF7), Color(0xFFE8F4EC)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AdminTheme.panelBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: AdminTheme.cardBackground,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AdminTheme.panelBorder.withOpacity(0.5), width: 1),
+        boxShadow: AdminTheme.cardShadow,
       ),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       child: LayoutBuilder(
         builder: (context, constraints) {
           return Column(
@@ -55,233 +44,245 @@ class DailyTrendPanel extends StatelessWidget {
               Wrap(
                 alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.center,
-                runSpacing: 12,
+                runSpacing: 16,
                 children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '📅 Evolución diaria de asistencias',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: AdminTheme.textDark,
-                        ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.trending_up_rounded,
+                            color: AdminTheme.bondiBlue,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 14),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Evolución de ingresos durante el día',
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  color: AdminTheme.textDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Cantidad de personas que han ingresado por hora',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AdminTheme.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
+                      const SizedBox(height: 8),
+                      Text(
                         'Seguimiento por hora de la jornada actual',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: AdminTheme.textMuted,
                         ),
                       ),
                     ],
                   ),
                   Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
+                    spacing: 12,
+                    runSpacing: 12,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _StatusBadge(
-                        icon: Icons.trending_up_rounded,
-                        label: 'Promedio por hora: ${average.toStringAsFixed(0)}',
-                        background: const Color(0xFFFEF3C7),
-                        foreground: const Color(0xFFE09A00),
-                      ),
-                      _StatusBadge(
-                        icon:
-                            variation >= 0
-                                ? Icons.arrow_upward_rounded
-                                : Icons.arrow_downward_rounded,
-                        label:
-                            '${variation >= 0 ? 'Sube' : 'Baja'} ${variation.abs()} desde ${labels.first}',
-                        background:
-                            variation >= 0
-                                ? const Color(0xFFE6F7EF)
-                                : const Color(0xFFFFEBEB),
-                        foreground:
-                            variation >= 0
-                                ? const Color(0xFF009739)
-                                : const Color(0xFFD64545),
+                      Text(
+                        'Promedio: ${average.toStringAsFixed(0)}',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AdminTheme.textMuted,
+                        ),
                       ),
                     ],
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, chartConstraints) {
-                return Stack(
-                  children: [
-                    LineChart(
-                      LineChartData(
-                        minX: 0,
-                        maxX: (values.length - 1).toDouble(),
-                        minY: 0,
-                        maxY: maxValue.toDouble(),
-                        lineTouchData: LineTouchData(enabled: true),
-                        titlesData: FlTitlesData(
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 44,
-                              interval: _calculateInterval(maxValue.toDouble()),
-                              getTitlesWidget: (value, meta) {
-                                if (value == 0) return const SizedBox();
-                                return Text(
-                                  value.toInt().toString(),
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: AdminTheme.textMuted,
-                                  ),
-                                );
-                              },
+                    return Stack(
+                      children: [
+                        LineChart(
+                          LineChartData(
+                            minX: 0,
+                            maxX: (values.length - 1).toDouble(),
+                            minY: 0,
+                            maxY: maxValue.toDouble(),
+                            lineTouchData: LineTouchData(
+                              enabled: true,
+                              touchTooltipData: LineTouchTooltipData(
+                                getTooltipColor: (_) => AdminTheme.regalBlue,
+                                tooltipRoundedRadius: 8,
+                                tooltipPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
                             ),
-                          ),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) {
-                                final index = value.toInt();
-                                if (index < 0 || index >= labels.length) {
-                                  return const SizedBox();
-                                }
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Text(
-                                    labels[index],
+                            titlesData: FlTitlesData(
+                              topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 48,
+                                  interval: _calculateInterval(maxValue.toDouble()),
+                                  getTitlesWidget: (value, meta) {
+                                    if (value == 0) return const SizedBox();
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: Text(
+                                        value.toInt().toString(),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AdminTheme.textMuted,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 40,
+                                  getTitlesWidget: (value, meta) {
+                                    final index = value.toInt();
+                                    if (index < 0 || index >= labels.length) {
+                                      return const SizedBox();
+                                    }
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        labels[index],
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AdminTheme.textDark,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            gridData: FlGridData(
+                              show: true,
+                              drawVerticalLine: true,
+                              horizontalInterval: _calculateInterval(
+                                maxValue.toDouble(),
+                              ),
+                              getDrawingHorizontalLine:
+                                  (value) => FlLine(
+                                    color: AdminTheme.panelBorder,
+                                    strokeWidth: 1.5,
+                                    dashArray: [4, 4],
+                                  ),
+                              getDrawingVerticalLine:
+                                  (value) => FlLine(
+                                    color: AdminTheme.panelBorder.withOpacity(0.5),
+                                    strokeWidth: 1,
+                                  ),
+                            ),
+                            borderData: FlBorderData(show: false),
+                            lineBarsData: [
+                              LineChartBarData(
+                                spots:
+                                    values
+                                        .asMap()
+                                        .entries
+                                        .map(
+                                          (entry) => FlSpot(
+                                            entry.key.toDouble(),
+                                            entry.value.toDouble(),
+                                          ),
+                                        )
+                                        .toList(),
+                                isCurved: true,
+                                color: AdminTheme.bondiBlue,
+                                barWidth: 4,
+                                belowBarData: BarAreaData(
+                                  show: true,
+                                  color: AdminTheme.bondiBlue.withOpacity(0.1),
+                                ),
+                                dotData: const FlDotData(
+                                  show: true,
+                                  getDotPainter: _customDotPainter,
+                                ),
+                              ),
+                            ],
+                              extraLinesData: ExtraLinesData(
+                              horizontalLines: [
+                                HorizontalLine(
+                                  y: average,
+                                  color: AdminTheme.regalBlue,
+                                  strokeWidth: 2.5,
+                                  dashArray: const [8, 5],
+                                  label: HorizontalLineLabel(
+                                    show: true,
+                                    alignment: Alignment.topLeft,
+                                    padding: const EdgeInsets.only(left: 12, top: 4),
                                     style: const TextStyle(
                                       fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF4A5568),
+                                      fontWeight: FontWeight.w700,
+                                      color: AdminTheme.regalBlue,
                                     ),
+                                    labelResolver:
+                                        (line) =>
+                                            'Promedio: ${average.toStringAsFixed(0)}',
                                   ),
-                                );
-                              },
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: true,
-                          horizontalInterval: _calculateInterval(
-                            maxValue.toDouble(),
-                          ),
-                          getDrawingHorizontalLine:
-                              (value) => FlLine(
-                                color: Colors.grey.shade300,
-                                strokeWidth: 1,
-                              ),
-                          getDrawingVerticalLine:
-                              (value) => FlLine(
-                                color: Colors.grey.shade300.withOpacity(0.6),
-                                strokeWidth: 1,
-                              ),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots:
-                                values
-                                    .asMap()
-                                    .entries
-                                    .map(
-                                      (entry) => FlSpot(
-                                        entry.key.toDouble(),
-                                        entry.value.toDouble(),
+                        Positioned.fill(
+                          child: LayoutBuilder(
+                            builder: (context, innerConstraints) {
+                              final width = innerConstraints.maxWidth;
+                              final height = innerConstraints.maxHeight;
+
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: List.generate(values.length, (index) {
+                                  final value = values[index];
+                                  final y =
+                                      (value / maxValue).clamp(0.0, 1.0).toDouble();
+                                  final topOffset = height - (height * y);
+
+                                  return SizedBox(
+                                    width: width / values.length,
+                                    child: Align(
+                                      alignment: Alignment.topCenter,
+                                      child: Padding(
+                                        padding: EdgeInsets.only(
+                                          top: max(8.0, topOffset - 40),
+                                        ),
+                                        child: _ValueChip(label: '$value personas'),
                                       ),
-                                    )
-                                    .toList(),
-                            isCurved: true,
-                            color: const Color(0xFF009739),
-                            barWidth: 4,
-                            belowBarData: BarAreaData(
-                              show: true,
-                              gradient: LinearGradient(
-                                colors: [
-                                  const Color(0xFF009739).withOpacity(0.30),
-                                  const Color(0xFF009739).withOpacity(0.05),
-                                ],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                            ),
-                            dotData: const FlDotData(
-                              show: true,
-                              getDotPainter: _customDotPainter,
-                            ),
-                          ),
-                        ],
-                        extraLinesData: ExtraLinesData(
-                          horizontalLines: [
-                            HorizontalLine(
-                              y: average,
-                              color: const Color(0xFF4285F4),
-                              strokeWidth: 2,
-                              dashArray: const [6, 4],
-                              label: HorizontalLineLabel(
-                                show: true,
-                                alignment: Alignment.topLeft,
-                                padding: const EdgeInsets.only(left: 8),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF4285F4),
-                                ),
-                                labelResolver:
-                                    (line) =>
-                                        'Promedio semanal ${average.toStringAsFixed(0)}',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: LayoutBuilder(
-                        builder: (context, innerConstraints) {
-                          final width = innerConstraints.maxWidth;
-                          final height = innerConstraints.maxHeight;
-
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: List.generate(values.length, (index) {
-                              final value = values[index];
-                              final y =
-                                  (value / maxValue).clamp(0.0, 1.0).toDouble();
-                              final topOffset = height - (height * y);
-
-                              return SizedBox(
-                                width: width / values.length,
-                                child: Align(
-                                  alignment: Alignment.topCenter,
-                                  child: Padding(
-                                    padding: EdgeInsets.only(
-                                      top: max(8.0, topOffset - 36),
                                     ),
-                                    child: _ValueChip(label: '$value personas'),
-                                  ),
-                                ),
+                                  );
+                                }),
                               );
-                            }),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
             ],
           );
         },
@@ -306,10 +307,10 @@ class DailyTrendPanel extends StatelessWidget {
     int index,
   ) {
     return FlDotCirclePainter(
-      radius: 5,
+      radius: 6,
       color: Colors.white,
-      strokeWidth: 3,
-      strokeColor: const Color(0xFF009739),
+      strokeWidth: 3.5,
+      strokeColor: AdminTheme.bondiBlue,
     );
   }
 }
@@ -322,63 +323,19 @@ class _ValueChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF009739),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 3)),
-        ],
+        color: AdminTheme.bondiBlue,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         label,
         style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
           color: Colors.white,
         ),
         textAlign: TextAlign.center,
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({
-    required this.icon,
-    required this.label,
-    required this.background,
-    required this.foreground,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color background;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: foreground.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: foreground),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: foreground,
-            ),
-          ),
-        ],
       ),
     );
   }

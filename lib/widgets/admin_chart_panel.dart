@@ -429,7 +429,6 @@ class AdminChartPanel extends StatelessWidget {
     );
   }
 }
-
 class _LegendRow extends StatelessWidget {
   const _LegendRow();
 
@@ -477,3 +476,4 @@ class _LegendDot extends StatelessWidget {
     );
   }
 }
+
